@@ -82,16 +82,30 @@ class SimpleAssetTracker:
         try:
             await self._ensure_async_client()
             account = await self.async_client.futures_account()
+            prices = await self._get_all_usdt_prices()
 
             # Get USDT-M futures balances
             futures_balances = await self.async_client.futures_account_balance()
             futures_total = sum(float(asset['balance']) for asset in futures_balances)
             futures_upnl = sum(float(asset['crossUnPnl']) for asset in futures_balances)
 
-            # Get Coin-M futures balances
+            # Get Coin-M futures balances and convert to USDT
             coin_futures_balances = await self.async_client.futures_coin_account_balance()
-            coin_futures_total = sum(float(asset['balance']) for asset in coin_futures_balances)
-            coin_futures_upnl = sum(float(asset['crossUnPnl']) for asset in coin_futures_balances)
+            coin_futures_total = sum(
+                float(asset['balance']) * prices.get(asset['asset'], 0)
+                for asset in coin_futures_balances
+            )
+            coin_futures_upnl = sum(
+                float(asset['crossUnPnl']) * prices.get(asset['asset'], 0)
+                for asset in coin_futures_balances
+            )
+
+            # Log warnings for missing prices
+            for asset in coin_futures_balances:
+                if asset['asset'] not in prices and (
+                    float(asset['balance']) != 0 or float(asset['crossUnPnl']) != 0
+                ):
+                    logger.warning(f"No price found for coin-margined futures asset: {asset['asset']}")
 
             return {
                 'wallet_balance': float(account['totalWalletBalance']),
