@@ -1,5 +1,5 @@
 streamlit
-ccxt
+python-binance
 psycopg2-binary
 python-dotenv
 bcrypt
