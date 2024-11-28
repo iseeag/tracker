@@ -4,8 +4,8 @@ from traceback import format_exc
 import streamlit as st
 from loguru import logger
 
-from simple_asset_tracker import SimpleAssetTracker
 from database import CredentialManager, UserManager, init_db
+from simple_asset_tracker import SimpleAssetTracker
 
 # Configure logger
 logger.add("app.log", rotation="500 MB", retention="10 days")

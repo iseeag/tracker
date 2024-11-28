@@ -31,7 +31,7 @@ class SimpleAssetTracker:
             for ticker in tickers:
                 symbol = ticker['symbol']
                 price = float(ticker['price'])
-                
+
                 if symbol.endswith('USDT'):
                     base = symbol[:-4]  # Remove 'USDT'
                     prices[base] = price
@@ -49,7 +49,7 @@ class SimpleAssetTracker:
 
             # Add USDT price
             prices['USDT'] = 1.0
-            
+
             return prices
         except Exception as e:
             logger.error(f"Error fetching prices: {str(e)}\n{format_exc()}")
@@ -61,14 +61,14 @@ class SimpleAssetTracker:
             await self._ensure_async_client()
             account = await self.async_client.get_account()
             prices = await self._get_all_usdt_prices()
-            
+
             total_value = sum(
                 float(asset['free']) * prices.get(asset['asset'], 0) +
                 float(asset['locked']) * prices.get(asset['asset'], 0)
                 for asset in account['balances']
                 if float(asset['free']) + float(asset['locked']) > 0
             )
-            
+
             return {
                 'total_value': total_value,
                 'raw_data': account
@@ -82,17 +82,17 @@ class SimpleAssetTracker:
         try:
             await self._ensure_async_client()
             account = await self.async_client.futures_account()
-            
+
             # Get USDT-M futures balances
             futures_balances = await self.async_client.futures_account_balance()
             futures_total = sum(float(asset['balance']) for asset in futures_balances)
             futures_upnl = sum(float(asset['crossUnPnl']) for asset in futures_balances)
-            
+
             # Get Coin-M futures balances
             coin_futures_balances = await self.async_client.futures_coin_account_balance()
             coin_futures_total = sum(float(asset['balance']) for asset in coin_futures_balances)
             coin_futures_upnl = sum(float(asset['crossUnPnl']) for asset in coin_futures_balances)
-            
+
             return {
                 'wallet_balance': float(account['totalWalletBalance']),
                 'unrealized_pnl': float(account['totalUnrealizedProfit']),
@@ -129,11 +129,11 @@ class SimpleAssetTracker:
         try:
             await self._ensure_async_client()
             account = await self.async_client.get_margin_account()
-            
+
             # Get BTC price for conversion
             prices = await self._get_all_usdt_prices()
             btc_price = prices.get('BTC', 0)
-            
+
             return {
                 'total_asset_btc': float(account['totalAssetOfBtc']),
                 'total_liability_btc': float(account['totalLiabilityOfBtc']),
@@ -159,17 +159,17 @@ class SimpleAssetTracker:
         """Get all account breakdowns."""
         try:
             await self._ensure_async_client()
-            
+
             spot = await self.get_spot_breakdown()
             futures = await self.get_futures_breakdown()
             margin = await self.get_margin_breakdown()
-            
+
             total_value = (
-                spot['total_value'] +  # Spot value
-                futures['margin_balance'] +  # Futures value including unrealized PnL
-                margin['total_net_asset_usd']  # Margin net value in USD
+                    spot['total_value'] +  # Spot value
+                    futures['margin_balance'] +  # Futures value including unrealized PnL
+                    margin['total_net_asset_usd']  # Margin net value in USD
             )
-            
+
             return {
                 'total_value': total_value,
                 'spot_breakdown': spot,
