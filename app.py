@@ -164,11 +164,25 @@ def render_dashboard():
     if not credentials:
         st.info("No credentials found. Please add credentials in the Credential Management section.")
         return
+
+    # Add refresh button in the header
+    col1, col2 = st.columns([0.9, 0.1])
+    with col1:
+        st.write("### Summary")
+    with col2:
+        if st.button("🔄 Refresh"):
+            st.cache_data.clear()
+            st.rerun()
     
-    data = asyncio.run(fetch_asset_data(credentials))
+    @st.cache_data(ttl=300)  # Cache data for 5 minutes
+    def get_cached_data(credentials_str):
+        return asyncio.run(fetch_asset_data(credentials))
+
+    # Use credentials as cache key
+    credentials_str = str([(c['id'], c['label']) for c in credentials])
+    data = get_cached_data(credentials_str)
     
     # Summary section
-    st.write("### Summary")
     total_value = sum(d['total_value'] for d in data)
     total_initial = sum(d['initial_value'] for d in data)
     total_pnl = sum(d['pnl'] for d in data)
