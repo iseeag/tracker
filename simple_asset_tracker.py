@@ -103,13 +103,13 @@ class SimpleAssetTracker:
             # Log warnings for missing prices
             for asset in coin_futures_balances:
                 if asset['asset'] not in prices and (
-                    float(asset['balance']) != 0 or float(asset['crossUnPnl']) != 0
+                        float(asset['balance']) != 0 or float(asset['crossUnPnl']) != 0
                 ):
                     logger.warning(f"No price found for coin-margined futures asset: {asset['asset']}")
 
             return {
-                'wallet_balance': float(account['totalWalletBalance']),
-                'unrealized_pnl': float(account['totalUnrealizedProfit']),
+                'wallet_balance': float(account['totalWalletBalance']) + coin_futures_total,  # add coin futures balance
+                'unrealized_pnl': float(account['totalUnrealizedProfit']) + coin_futures_upnl,  # add coin futures upnl
                 'margin_balance': float(account['totalMarginBalance']),
                 'cross_wallet_balance': float(account['totalCrossWalletBalance']),
                 'cross_upnl': float(account['totalCrossUnPnl']),
@@ -180,7 +180,7 @@ class SimpleAssetTracker:
 
             total_value = (
                     spot['total_value'] +  # Spot value
-                    futures['margin_balance'] +  # Futures value including unrealized PnL
+                    futures['wallet_balance'] + futures['unrealized_pnl'] +  # Futures value including unrealized PnL
                     margin['total_net_asset_usd']  # Margin net value in USD
             )
 
