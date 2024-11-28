@@ -11,29 +11,26 @@ class AssetTracker:
         logger.debug("Initializing AssetTracker")
         self.client = Client(api_key, api_secret)
         self.async_client = None
-        self._prices_cache = {}
-    
+
     async def _ensure_async_client(self):
         if self.async_client is None:
             self.async_client = await AsyncClient.create(
                 api_key=self.client.API_KEY,
                 api_secret=self.client.API_SECRET
             )
-    
+
     async def _get_usdt_price(self, symbol: str) -> float:
-        """Get USDT price for a symbol, with caching."""
+        """Get USDT price for a symbol."""
         if symbol == 'USDT':
             return 1.0
-            
+
         try:
-            if symbol not in self._prices_cache:
-                ticker = await self.async_client.get_symbol_ticker(symbol=f"{symbol}USDT")
-                self._prices_cache[symbol] = float(ticker['price'])
-            return self._prices_cache[symbol]
+            ticker = await self.async_client.get_symbol_ticker(symbol=f"{symbol}USDT")
+            return float(ticker['price'])
         except Exception as e:
-            logger.error(f"Error getting price for {symbol}: {str(e)}")
+            logger.error(f"Error getting price for {symbol}USDT: {str(e)}")
             return 0.0
-    
+
     async def get_spot_balance(self) -> Dict:
         """Get spot wallet balances."""
         try:
@@ -49,7 +46,7 @@ class AssetTracker:
         except Exception as e:
             logger.error(f"Error fetching spot balance: {str(e)}\n{format_exc()}")
             return {}
-    
+
     async def get_margin_balance(self) -> Dict:
         """Get cross margin account balances."""
         try:
@@ -65,7 +62,7 @@ class AssetTracker:
         except Exception as e:
             logger.error(f"Error fetching margin balance: {str(e)}\n{format_exc()}")
             return {}
-    
+
     async def get_futures_balance(self) -> Dict:
         """Get USDT-M futures account balances."""
         try:
@@ -81,7 +78,7 @@ class AssetTracker:
         except Exception as e:
             logger.error(f"Error fetching futures balance: {str(e)}\n{format_exc()}")
             return {}
-    
+
     async def get_futures_positions(self) -> List[Dict]:
         """Get USDT-M futures positions."""
         try:
@@ -105,46 +102,26 @@ class AssetTracker:
         except Exception as e:
             logger.error(f"Error fetching futures positions: {str(e)}\n{format_exc()}")
             return []
-    
-    async def get_savings_balance(self) -> Dict:
-        """Get flexible savings balances."""
-        try:
-            await self._ensure_async_client()
-            savings = await self.async_client.get_lending_position()
-            result = {
-                item['asset']: float(item['totalAmount'])
-                for item in savings
-                if float(item['totalAmount']) > 0
-            }
-            logger.debug(f"Savings balance fetched: {len(result)} assets")
-            return result
-        except Exception as e:
-            logger.error(f"Error fetching savings balance: {str(e)}\n{format_exc()}")
-            return {}
-    
+
     async def get_all_data(self) -> Dict:
         """Fetch all balances and positions."""
         try:
             await self._ensure_async_client()
-            # Clear price cache before new data fetch
-            self._prices_cache = {}
             
             tasks = [
                 self.get_spot_balance(),
                 self.get_margin_balance(),
                 self.get_futures_balance(),
                 self.get_futures_positions(),
-                self.get_savings_balance(),
             ]
-            
-            spot, margin, futures_balance, futures_positions, savings = await asyncio.gather(*tasks)
-            
+
+            spot, margin, futures_balance, futures_positions = await asyncio.gather(*tasks)
+
             return {
                 'spot_balance': spot,
                 'margin_balance': margin,
                 'futures_balance': futures_balance,
                 'futures_positions': futures_positions,
-                'savings_balance': savings
             }
         except Exception as e:
             logger.error(f"Error fetching all data: {str(e)}\n{format_exc()}")
@@ -153,14 +130,13 @@ class AssetTracker:
                 'margin_balance': {},
                 'futures_balance': {},
                 'futures_positions': [],
-                'savings_balance': {}
             }
-    
+
     async def calculate_total_value(self, data: Dict) -> Dict:
         """Calculate total portfolio value in USDT."""
         try:
             await self._ensure_async_client()
-            
+
             # Calculate spot value
             spot_tasks = [
                 self._get_usdt_price(currency) for currency in data['spot_balance'].keys()
@@ -170,7 +146,7 @@ class AssetTracker:
                 amount * price
                 for (currency, amount), price in zip(data['spot_balance'].items(), spot_prices)
             )
-            
+
             # Calculate margin value
             margin_tasks = [
                 self._get_usdt_price(currency) for currency in data['margin_balance'].keys()
@@ -180,7 +156,7 @@ class AssetTracker:
                 amount * price
                 for (currency, amount), price in zip(data['margin_balance'].items(), margin_prices)
             )
-            
+
             # Calculate futures value (includes unrealized PnL)
             total_futures = sum(
                 float(pos['notional']) for pos in data['futures_positions']
@@ -188,32 +164,20 @@ class AssetTracker:
             futures_pnl = sum(
                 float(pos['unPnl']) for pos in data['futures_positions']
             )
-            
-            # Calculate savings value
-            savings_tasks = [
-                self._get_usdt_price(currency) for currency in data['savings_balance'].keys()
-            ]
-            savings_prices = await asyncio.gather(*savings_tasks)
-            total_savings = sum(
-                amount * price
-                for (currency, amount), price in zip(data['savings_balance'].items(), savings_prices)
-            )
-            
-            total_value = total_spot + total_margin + total_futures + futures_pnl + total_savings
-            
+
+            total_value = total_spot + total_margin + total_futures + futures_pnl
+
             logger.debug(f"Total value calculated: {total_value:.2f} USDT")
             logger.debug(
                 f"Breakdown - Spot: {total_spot:.2f}, Margin: {total_margin:.2f}, "
-                f"Futures: {total_futures:.2f} (PnL: {futures_pnl:.2f}), "
-                f"Savings: {total_savings:.2f}"
+                f"Futures: {total_futures:.2f} (PnL: {futures_pnl:.2f})"
             )
-            
+
             return {
                 'total_value': total_value,
                 'total_spot': total_spot,
                 'total_margin': total_margin,
                 'total_futures': total_futures + futures_pnl,
-                'total_savings': total_savings,
                 'futures_pnl': futures_pnl
             }
         except Exception as e:
@@ -223,6 +187,5 @@ class AssetTracker:
                 'total_spot': 0,
                 'total_margin': 0,
                 'total_futures': 0,
-                'total_savings': 0,
                 'futures_pnl': 0
             }

@@ -148,7 +148,6 @@ async def fetch_asset_data(credentials):
                 'total_spot': values['total_spot'],
                 'total_margin': values['total_margin'],
                 'total_futures': values['total_futures'],
-                'total_savings': values['total_savings'],
                 'futures_pnl': values['futures_pnl'],
                 'initial_value': initial_value,
                 'pnl': pnl,
@@ -200,15 +199,13 @@ def render_dashboard():
             
             # Portfolio breakdown
             st.write("#### Portfolio Breakdown")
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Spot Value", f"${d['total_spot']:,.2f}")
             with col2:
                 st.metric("Margin Value", f"${d['total_margin']:,.2f}")
             with col3:
                 st.metric("Futures Value", f"${d['total_futures']:,.2f}")
-            with col4:
-                st.metric("Savings Value", f"${d['total_savings']:,.2f}")
 
 def main():
     st.set_page_config(
