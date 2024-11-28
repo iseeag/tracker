@@ -10,7 +10,7 @@ class AssetTracker:
     def __init__(self, api_key: str, api_secret: str):
         logger.debug("Initializing AssetTracker")
         self.client = Client(api_key, api_secret)
-        self.async_client = None
+        self.async_client: AsyncClient = None
 
     async def _ensure_async_client(self):
         if self.async_client is None:
@@ -19,17 +19,41 @@ class AssetTracker:
                 api_secret=self.client.API_SECRET
             )
 
-    async def _get_usdt_price(self, symbol: str) -> float:
-        """Get USDT price for a symbol."""
-        if symbol == 'USDT':
-            return 1.0
-
+    async def _get_all_usdt_prices(self) -> Dict[str, float]:
+        """Get all USDT prices in one API call."""
         try:
-            ticker = await self.async_client.get_symbol_ticker(symbol=f"{symbol}USDT")
-            return float(ticker['price'])
+            tickers = await self.async_client.get_symbol_ticker()
+            # Create price lookup dictionary for both USDT and BTC pairs
+            prices = {}
+            btc_prices = {}
+            btc_usdt_price = None
+
+            for ticker in tickers:
+                symbol = ticker['symbol']
+                price = float(ticker['price'])
+
+                if symbol.endswith('USDT'):
+                    base = symbol[:-4]  # Remove 'USDT'
+                    prices[base] = price
+                elif symbol.endswith('BTC'):
+                    base = symbol[:-3]  # Remove 'BTC'
+                    btc_prices[base] = price
+                if symbol == 'BTCUSDT':
+                    btc_usdt_price = price
+
+            # For tokens without USDT pairs, try to calculate via BTC
+            if btc_usdt_price:
+                for base, btc_price in btc_prices.items():
+                    if base not in prices:
+                        prices[base] = btc_price * btc_usdt_price
+
+            # Add USDT price
+            prices['USDT'] = 1.0
+
+            return prices
         except Exception as e:
-            logger.error(f"Error getting price for {symbol}USDT: {str(e)}")
-            return 0.0
+            logger.error(f"Error fetching prices: {str(e)}\n{format_exc()}")
+            return {'USDT': 1.0}  # Return at least USDT price
 
     async def get_spot_balance(self) -> Dict:
         """Get spot wallet balances."""
@@ -107,7 +131,7 @@ class AssetTracker:
         """Fetch all balances and positions."""
         try:
             await self._ensure_async_client()
-            
+
             tasks = [
                 self.get_spot_balance(),
                 self.get_margin_balance(),
@@ -137,25 +161,30 @@ class AssetTracker:
         try:
             await self._ensure_async_client()
 
+            # Get all prices in one API call
+            prices = await self._get_all_usdt_prices()
+
             # Calculate spot value
-            spot_tasks = [
-                self._get_usdt_price(currency) for currency in data['spot_balance'].keys()
-            ]
-            spot_prices = await asyncio.gather(*spot_tasks)
             total_spot = sum(
-                amount * price
-                for (currency, amount), price in zip(data['spot_balance'].items(), spot_prices)
+                amount * prices.get(currency, 0)
+                for currency, amount in data['spot_balance'].items()
+                if amount > 0
             )
+            # Log warning for any missing prices in spot balance
+            for currency in data['spot_balance']:
+                if currency not in prices and data['spot_balance'][currency] > 0:
+                    logger.warning(f"No price found for spot balance asset: {currency}")
 
             # Calculate margin value
-            margin_tasks = [
-                self._get_usdt_price(currency) for currency in data['margin_balance'].keys()
-            ]
-            margin_prices = await asyncio.gather(*margin_tasks)
             total_margin = sum(
-                amount * price
-                for (currency, amount), price in zip(data['margin_balance'].items(), margin_prices)
+                amount * prices.get(currency, 0)
+                for currency, amount in data['margin_balance'].items()
+                if amount != 0
             )
+            # Log warning for any missing prices in margin balance
+            for currency in data['margin_balance']:
+                if currency not in prices and data['margin_balance'][currency] != 0:
+                    logger.warning(f"No price found for margin balance asset: {currency}")
 
             # Calculate futures value (includes unrealized PnL)
             total_futures = sum(
