@@ -4,7 +4,7 @@ from traceback import format_exc
 import streamlit as st
 from loguru import logger
 
-from asset_tracker import AssetTracker
+from simple_asset_tracker import SimpleAssetTracker
 from database import CredentialManager, UserManager, init_db
 
 # Configure logger
@@ -133,22 +133,20 @@ async def fetch_asset_data(credentials):
     all_data = []
     for cred in credentials:
         logger.debug(f"Fetching data for credential: {cred['label']}")
-        tracker = AssetTracker(cred['api_key'], cred['api_secret'])
+        tracker = SimpleAssetTracker(cred['api_key'], cred['api_secret'])
         try:
-            data = await tracker.get_all_data()
-            values = await tracker.calculate_total_value(data)
+            data = await tracker.get_all_breakdowns()
             
             initial_value = float(cred['initial_value_usd'])
-            pnl = values['total_value'] - initial_value
+            pnl = data['total_value'] - initial_value
             pnl_percentage = (pnl / initial_value) * 100 if initial_value > 0 else 0
             
             all_data.append({
                 'label': cred['label'],
-                'total_value': values['total_value'],
-                'total_spot': values['total_spot'],
-                'total_margin': values['total_margin'],
-                'total_futures': values['total_futures'],
-                'futures_breakdown': values['futures_breakdown'],
+                'total_value': data['total_value'],
+                'spot': data['spot_breakdown'],
+                'futures': data['futures_breakdown'],
+                'margin': data['margin_breakdown'],
                 'initial_value': initial_value,
                 'pnl': pnl,
                 'pnl_percentage': pnl_percentage
@@ -185,38 +183,52 @@ def render_dashboard():
     # Individual credential sections
     st.write("### Credential Details")
     for d in data:
-        with st.expander(f" {d['label']}"):
+        with st.expander(f"{d['label']}"):
             # Main metrics
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
             with col1:
                 st.metric("Total Value", f"${d['total_value']:,.2f}")
                 st.metric("Initial Value", f"${d['initial_value']:,.2f}")
             with col2:
                 st.metric("Total P&L", f"${d['pnl']:,.2f}")
                 st.metric("P&L %", f"{d['pnl_percentage']:.2f}%")
-            with col3:
-                st.metric("Futures P&L", f"${d['futures_breakdown']['unrealized_pnl']:,.2f}")
             
-            # Portfolio breakdown
-            st.write("#### Portfolio Breakdown")
+            # Spot breakdown
+            st.write("#### Spot Account")
+            st.metric("Total Spot Value", f"${d['spot']['total_value']:,.2f}")
+            
+            # Margin breakdown
+            st.write("#### Margin Account")
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Spot Value", f"${d['total_spot']:,.2f}")
+                st.metric("Total Assets", f"${d['margin']['total_asset_usd']:,.2f}")
             with col2:
-                st.metric("Margin Value", f"${d['total_margin']:,.2f}")
+                st.metric("Total Liabilities", f"${d['margin']['total_liability_usd']:,.2f}")
             with col3:
-                st.metric("Futures Value", f"${d['total_futures']:,.2f}")
-                
+                st.metric("Net Value", f"${d['margin']['total_net_asset_usd']:,.2f}")
+            
             # Futures breakdown
-            if d['total_futures'] > 0:
-                st.write("#### Futures Breakdown")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Wallet Balance", f"${d['futures_breakdown']['wallet_balance']:,.2f}")
-                with col2:
-                    st.metric("Positions Value", f"${d['futures_breakdown']['positions_value']:,.2f}")
-                with col3:
-                    st.metric("Unrealized PnL", f"${d['futures_breakdown']['unrealized_pnl']:,.2f}")
+            st.write("#### Futures Account")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Wallet Balance", f"${d['futures']['wallet_balance']:,.2f}")
+                st.metric("Margin Balance", f"${d['futures']['margin_balance']:,.2f}")
+                st.metric("Available Balance", f"${d['futures']['available_balance']:,.2f}")
+            with col2:
+                st.metric("Unrealized PnL", f"${d['futures']['unrealized_pnl']:,.2f}")
+                st.metric("Cross Wallet Balance", f"${d['futures']['cross_wallet_balance']:,.2f}")
+                st.metric("Cross UPnL", f"${d['futures']['cross_upnl']:,.2f}")
+            
+            # USDT-M and Coin-M Futures breakdown
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("##### USDT-M Futures")
+                st.metric("Total Balance", f"${d['futures']['futures_breakdown']['total_balance']:,.2f}")
+                st.metric("Total UPnL", f"${d['futures']['futures_breakdown']['total_upnl']:,.2f}")
+            with col2:
+                st.write("##### Coin-M Futures")
+                st.metric("Total Balance", f"${d['futures']['coin_futures_breakdown']['total_balance']:,.2f}")
+                st.metric("Total UPnL", f"${d['futures']['coin_futures_breakdown']['total_upnl']:,.2f}")
 
 def main():
     st.set_page_config(

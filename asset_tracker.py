@@ -6,10 +6,6 @@ from binance import AsyncClient, Client
 from loguru import logger
 
 
-# todo: fix future balance
-# 2. fix usdt-based future position
-# 3. fix coin-based future position
-
 class AssetTracker:
     def __init__(self, api_key: str, api_secret: str):
         logger.debug("Initializing AssetTracker")
@@ -156,7 +152,7 @@ class AssetTracker:
             return {
                 'spot_balance': {},
                 'margin_balance': {},
-                'futures_balance': {},  
+                'futures_balance': {},
                 'futures_positions': [],
             }
 
