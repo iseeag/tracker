@@ -136,7 +136,7 @@ async def fetch_asset_data(credentials):
         tracker = AssetTracker(cred['api_key'], cred['api_secret'])
         try:
             data = await tracker.get_all_data()
-            values = tracker.calculate_total_value(data)
+            values = await tracker.calculate_total_value(data)
             
             initial_value = float(cred['initial_value_usd'])
             pnl = values['total_value'] - initial_value
@@ -146,9 +146,10 @@ async def fetch_asset_data(credentials):
                 'label': cred['label'],
                 'total_value': values['total_value'],
                 'total_spot': values['total_spot'],
-                'total_funding': values['total_funding'],
+                'total_margin': values['total_margin'],
                 'total_futures': values['total_futures'],
-                'total_earning': values['total_earning'],
+                'total_savings': values['total_savings'],
+                'futures_pnl': values['futures_pnl'],
                 'initial_value': initial_value,
                 'pnl': pnl,
                 'pnl_percentage': pnl_percentage
@@ -185,26 +186,38 @@ def render_dashboard():
     # Individual credential sections
     st.write("### Credential Details")
     for d in data:
-        with st.expander(f"📊 {d['label']}"):
-            col1, col2 = st.columns(2)
+        with st.expander(f" {d['label']}"):
+            # Main metrics
+            col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Total Value", f"${d['total_value']:,.2f}")
-                st.metric("Spot Value", f"${d['total_spot']:,.2f}")
-                st.metric("Funding Value", f"${d['total_funding']:,.2f}")
+                st.metric("Initial Value", f"${d['initial_value']:,.2f}")
             with col2:
+                st.metric("Total P&L", f"${d['pnl']:,.2f}")
+                st.metric("P&L %", f"{d['pnl_percentage']:.2f}%")
+            with col3:
+                st.metric("Futures P&L", f"${d['futures_pnl']:,.2f}")
+            
+            # Portfolio breakdown
+            st.write("#### Portfolio Breakdown")
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Spot Value", f"${d['total_spot']:,.2f}")
+            with col2:
+                st.metric("Margin Value", f"${d['total_margin']:,.2f}")
+            with col3:
                 st.metric("Futures Value", f"${d['total_futures']:,.2f}")
-                st.metric("Earning Value", f"${d['total_earning']:,.2f}")
-                st.metric("P&L", f"${d['pnl']:,.2f}", 
-                         f"{d['pnl_percentage']:.2f}%")
+            with col4:
+                st.metric("Savings Value", f"${d['total_savings']:,.2f}")
 
 def main():
     st.set_page_config(
         page_title="Binance Asset Tracker",
-        page_icon="📈",
+        page_icon="",
         layout="wide"
     )
     
-    st.title("📈 Binance Asset Tracker")
+    st.title("")
     
     # Initialize database
     init_db()
