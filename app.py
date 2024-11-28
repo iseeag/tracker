@@ -37,96 +37,94 @@ def register_user(username: str, password: str) -> bool:
     return success
 
 def render_login_section():
-    st.subheader("Login / Register")
+    st.subheader("登录 / 注册")
     
-    tab1, tab2 = st.tabs(["Login", "Register"])
+    tab1, tab2 = st.tabs(["登录", "注册"])
     
     with tab1:
         with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Login")
+            username = st.text_input("用户名")
+            password = st.text_input("密码", type="password")
+            submitted = st.form_submit_button("登录")
             
             if submitted:
                 if login_user(username, password):
-                    st.success("Login successful!")
+                    st.success("登录成功！")
                     st.rerun()
                 else:
-                    st.error("Invalid credentials")
+                    st.error("用户名或密码错误")
     
     with tab2:
         with st.form("register_form"):
-            new_username = st.text_input("Username")
-            new_password = st.text_input("Password", type="password")
-            confirm_password = st.text_input("Confirm Password", type="password")
-            submitted = st.form_submit_button("Register")
+            new_username = st.text_input("用户名")
+            new_password = st.text_input("密码", type="password")
+            confirm_password = st.text_input("确认密码", type="password")
+            submitted = st.form_submit_button("注册")
             
             if submitted:
                 if new_password != confirm_password:
-                    st.error("Passwords do not match")
+                    st.error("两次输入的密码不一致")
                 elif register_user(new_username, new_password):
-                    st.success("Registration successful! Please login.")
+                    st.success("注册成功！请登录。")
                 else:
-                    st.error("Registration failed. Username might be taken.")
+                    st.error("注册失败。用户名可能已被使用。")
 
 def render_credential_section():
-    st.subheader("Credential Management")
+    st.subheader("凭证管理")
     
     credentials = CredentialManager.get_credentials(st.session_state.user['id'])
     
-    with st.expander("Add New Credential"):
+    with st.expander("添加新凭证"):
         with st.form("add_credential"):
-            label = st.text_input("Label")
-            api_key = st.text_input("API Key")
-            api_secret = st.text_input("API Secret", type="password")
-            initial_value = st.number_input("Initial Value (USD)", min_value=0.0)
-            submitted = st.form_submit_button("Add Credential")
+            label = st.text_input("标签")
+            api_key = st.text_input("API密钥")
+            api_secret = st.text_input("API密钥", type="password")
+            initial_value = st.number_input("初始投资额 (USD)", min_value=0.0)
+            submitted = st.form_submit_button("添加凭证")
             
             if submitted:
                 if CredentialManager.add_credential(
                     st.session_state.user['id'], api_key, api_secret, 
                     initial_value, label
                 ):
-                    st.success("Credential added successfully!")
+                    st.success("凭证添加成功！")
                     st.rerun()
                 else:
-                    st.error("Failed to add credential")
+                    st.error("添加凭证失败")
     
     for cred in credentials:
-        with st.expander(f"Credential: {cred['label']}"):
+        with st.expander(f"凭证: {cred['label']}"):
             with st.form(f"edit_credential_{cred['id']}"):
-                new_label = st.text_input("Label", value=cred['label'])
-                new_api_key = st.text_input("API Key", value=cred['api_key'])
-                new_api_secret = st.text_input("API Secret", 
-                                             value=cred['api_secret'], 
-                                             type="password")
-                new_initial_value = st.number_input("Initial Value (USD)", 
-                                                  value=float(cred['initial_value_usd']))
-                
+                new_label = st.text_input("标签", value=cred['label'])
+                new_api_key = st.text_input("API密钥", value=cred['api_key'])
+                new_api_secret = st.text_input("API密钥", value=cred['api_secret'], type="password")
+                new_initial_value = st.number_input(
+                    "初始投资额 (USD)", 
+                    value=float(cred['initial_value_usd']),
+                    min_value=0.0
+                )
                 col1, col2 = st.columns(2)
                 with col1:
-                    update = st.form_submit_button("Update")
+                    update = st.form_submit_button("更新凭证")
                 with col2:
-                    delete = st.form_submit_button("Delete", type="primary")
+                    delete = st.form_submit_button("删除凭证", type="primary")
                 
                 if update:
                     if CredentialManager.update_credential(
-                        cred['id'], st.session_state.user['id'],
-                        new_api_key, new_api_secret, new_initial_value, new_label
+                        cred['id'], new_api_key, new_api_secret,
+                        new_initial_value, new_label
                     ):
-                        st.success("Credential updated successfully!")
+                        st.success("凭证更新成功！")
                         st.rerun()
                     else:
-                        st.error("Failed to update credential")
+                        st.error("更新凭证失败")
                 
                 if delete:
-                    if CredentialManager.delete_credential(
-                        cred['id'], st.session_state.user['id']
-                    ):
-                        st.success("Credential deleted successfully!")
+                    if CredentialManager.delete_credential(cred['id']):
+                        st.success("凭证删除成功！")
                         st.rerun()
                     else:
-                        st.error("Failed to delete credential")
+                        st.error("删除凭证失败")
 
 async def fetch_asset_data(credentials):
     logger.info("Starting to fetch asset data")
@@ -158,19 +156,19 @@ async def fetch_asset_data(credentials):
     return all_data
 
 def render_dashboard():
-    st.subheader("Asset Dashboard")
+    st.subheader("资产仪表盘")
     
     credentials = CredentialManager.get_credentials(st.session_state.user['id'])
     if not credentials:
-        st.info("No credentials found. Please add credentials in the Credential Management section.")
+        st.info("未找到凭证。请在凭证管理部分添加凭证。")
         return
 
     # Add refresh button in the header
     col1, col2 = st.columns([0.9, 0.1])
     with col1:
-        st.write("### Summary")
+        st.write("### 总览")
     with col2:
-        if st.button("🔄 Refresh"):
+        if st.button("🔄 刷新"):
             st.cache_data.clear()
             st.rerun()
     
@@ -189,64 +187,64 @@ def render_dashboard():
     total_pnl_percentage = (total_pnl / total_initial) * 100 if total_initial > 0 else 0
     
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Value", f"${total_value:,.2f}")
-    col2.metric("Initial Investment", f"${total_initial:,.2f}")
-    col3.metric("Total P&L", f"${total_pnl:,.2f}")
-    col4.metric("Total P&L %", f"{total_pnl_percentage:.2f}%")
+    col1.metric("总资产", f"${total_value:,.2f}")
+    col2.metric("初始投资", f"${total_initial:,.2f}")
+    col3.metric("总盈亏", f"${total_pnl:,.2f}")
+    col4.metric("总盈亏率", f"{total_pnl_percentage:.2f}%")
     
     # Individual credential sections
-    st.write("### Credential Details")
+    st.write("### 账户详情")
     for d in data:
         with st.expander(f"{d['label']}"):
             # Main metrics
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Total Value", f"${d['total_value']:,.2f}")
-                st.metric("Initial Value", f"${d['initial_value']:,.2f}")
+                st.metric("总资产", f"${d['total_value']:,.2f}")
+                st.metric("初始投资", f"${d['initial_value']:,.2f}")
             with col2:
-                st.metric("Total P&L", f"${d['pnl']:,.2f}")
-                st.metric("P&L %", f"{d['pnl_percentage']:.2f}%")
+                st.metric("总盈亏", f"${d['pnl']:,.2f}")
+                st.metric("盈亏率", f"{d['pnl_percentage']:.2f}%")
             
             # Spot breakdown
-            st.write("#### Spot Account")
-            st.metric("Total Spot Value", f"${d['spot']['total_value']:,.2f}")
+            st.write("#### 现货账户")
+            st.metric("现货总值", f"${d['spot']['total_value']:,.2f}")
             
             # Margin breakdown
-            st.write("#### Margin Account")
+            st.write("#### 杠杆账户")
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Total Assets", f"${d['margin']['total_asset_usd']:,.2f}")
+                st.metric("总资产", f"${d['margin']['total_asset_usd']:,.2f}")
             with col2:
-                st.metric("Total Liabilities", f"${d['margin']['total_liability_usd']:,.2f}")
+                st.metric("总负债", f"${d['margin']['total_liability_usd']:,.2f}")
             with col3:
-                st.metric("Net Value", f"${d['margin']['total_net_asset_usd']:,.2f}")
+                st.metric("净资产", f"${d['margin']['total_net_asset_usd']:,.2f}")
             
             # Futures breakdown
-            st.write("#### Futures Account")
+            st.write("#### 合约账户")
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("Wallet Balance", f"${d['futures']['wallet_balance']:,.2f}")
-                st.metric("Margin Balance", f"${d['futures']['margin_balance']:,.2f}")
-                st.metric("Available Balance", f"${d['futures']['available_balance']:,.2f}")
+                st.metric("钱包余额", f"${d['futures']['wallet_balance']:,.2f}")
+                st.metric("保证金余额", f"${d['futures']['margin_balance']:,.2f}")
+                st.metric("可用余额", f"${d['futures']['available_balance']:,.2f}")
             with col2:
-                st.metric("Unrealized PnL", f"${d['futures']['unrealized_pnl']:,.2f}")
-                st.metric("Cross Wallet Balance", f"${d['futures']['cross_wallet_balance']:,.2f}")
-                st.metric("Cross UPnL", f"${d['futures']['cross_upnl']:,.2f}")
+                st.metric("未实现盈亏", f"${d['futures']['unrealized_pnl']:,.2f}")
+                st.metric("全仓钱包余额", f"${d['futures']['cross_wallet_balance']:,.2f}")
+                st.metric("全仓未实现盈亏", f"${d['futures']['cross_upnl']:,.2f}")
             
             # USDT-M and Coin-M Futures breakdown
             col1, col2 = st.columns(2)
             with col1:
-                st.write("##### USDT-M Futures")
-                st.metric("Total Balance", f"${d['futures']['futures_breakdown']['total_balance']:,.2f}")
-                st.metric("Total UPnL", f"${d['futures']['futures_breakdown']['total_upnl']:,.2f}")
+                st.write("##### U本位合约")
+                st.metric("总余额", f"${d['futures']['futures_breakdown']['total_balance']:,.2f}")
+                st.metric("总未实现盈亏", f"${d['futures']['futures_breakdown']['total_upnl']:,.2f}")
             with col2:
-                st.write("##### Coin-M Futures")
-                st.metric("Total Balance", f"${d['futures']['coin_futures_breakdown']['total_balance']:,.2f}")
-                st.metric("Total UPnL", f"${d['futures']['coin_futures_breakdown']['total_upnl']:,.2f}")
+                st.write("##### 币本位合约")
+                st.metric("总余额", f"${d['futures']['coin_futures_breakdown']['total_balance']:,.2f}")
+                st.metric("总未实现盈亏", f"${d['futures']['coin_futures_breakdown']['total_upnl']:,.2f}")
 
 def main():
     st.set_page_config(
-        page_title="Binance Asset Tracker",
+        page_title="币安资产追踪器",
         page_icon="",
         layout="wide"
     )
@@ -258,13 +256,13 @@ def main():
     
     # Render logout button if user is logged in
     if st.session_state.user:
-        st.sidebar.button("Logout", on_click=logout_user)
-        st.sidebar.write(f"Logged in as: {st.session_state.user['username']}")
+        st.sidebar.button("登出", on_click=logout_user)
+        st.sidebar.write(f"登录用户: {st.session_state.user['username']}")
     
     if not st.session_state.user:
         render_login_section()
     else:
-        tab1, tab2 = st.tabs(["Dashboard", "Credential Management"])
+        tab1, tab2 = st.tabs(["仪表盘", "凭证管理"])
         
         with tab1:
             render_dashboard()
