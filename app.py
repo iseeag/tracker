@@ -148,7 +148,7 @@ async def fetch_asset_data(credentials):
                 'total_spot': values['total_spot'],
                 'total_margin': values['total_margin'],
                 'total_futures': values['total_futures'],
-                'futures_pnl': values['futures_pnl'],
+                'futures_breakdown': values['futures_breakdown'],
                 'initial_value': initial_value,
                 'pnl': pnl,
                 'pnl_percentage': pnl_percentage
@@ -195,7 +195,7 @@ def render_dashboard():
                 st.metric("Total P&L", f"${d['pnl']:,.2f}")
                 st.metric("P&L %", f"{d['pnl_percentage']:.2f}%")
             with col3:
-                st.metric("Futures P&L", f"${d['futures_pnl']:,.2f}")
+                st.metric("Futures P&L", f"${d['futures_breakdown']['unrealized_pnl']:,.2f}")
             
             # Portfolio breakdown
             st.write("#### Portfolio Breakdown")
@@ -206,6 +206,17 @@ def render_dashboard():
                 st.metric("Margin Value", f"${d['total_margin']:,.2f}")
             with col3:
                 st.metric("Futures Value", f"${d['total_futures']:,.2f}")
+                
+            # Futures breakdown
+            if d['total_futures'] > 0:
+                st.write("#### Futures Breakdown")
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Wallet Balance", f"${d['futures_breakdown']['wallet_balance']:,.2f}")
+                with col2:
+                    st.metric("Positions Value", f"${d['futures_breakdown']['positions_value']:,.2f}")
+                with col3:
+                    st.metric("Unrealized PnL", f"${d['futures_breakdown']['unrealized_pnl']:,.2f}")
 
 def main():
     st.set_page_config(

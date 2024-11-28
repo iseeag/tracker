@@ -6,6 +6,10 @@ from binance import AsyncClient, Client
 from loguru import logger
 
 
+# todo: fix future balance
+# 2. fix usdt-based future position
+# 3. fix coin-based future position
+
 class AssetTracker:
     def __init__(self, api_key: str, api_secret: str):
         logger.debug("Initializing AssetTracker")
@@ -93,9 +97,9 @@ class AssetTracker:
             await self._ensure_async_client()
             account = await self.async_client.futures_account()
             result = {
-                asset['asset']: float(asset['balance'])
+                asset['asset']: float(asset['walletBalance'])
                 for asset in account['assets']
-                if float(asset['balance']) != 0
+                if float(asset['walletBalance']) != 0
             }
             logger.debug(f"Futures balance fetched: {len(result)} assets")
             return result
@@ -152,7 +156,7 @@ class AssetTracker:
             return {
                 'spot_balance': {},
                 'margin_balance': {},
-                'futures_balance': {},
+                'futures_balance': {},  
                 'futures_positions': [],
             }
 
@@ -186,28 +190,48 @@ class AssetTracker:
                 if currency not in prices and data['margin_balance'][currency] != 0:
                     logger.warning(f"No price found for margin balance asset: {currency}")
 
-            # Calculate futures value (includes unrealized PnL)
-            total_futures = sum(
+            # Calculate futures value
+            # 1. Calculate futures wallet balance (unused funds)
+            total_futures_wallet = sum(
+                amount * prices.get(currency, 0)
+                for currency, amount in data['futures_balance'].items()
+                if amount != 0
+            )
+            # Log warning for any missing prices in futures balance
+            for currency in data['futures_balance']:
+                if currency not in prices and data['futures_balance'][currency] != 0:
+                    logger.warning(f"No price found for futures balance asset: {currency}")
+
+            # 2. Calculate futures positions value (includes unrealized PnL)
+            total_futures_positions = sum(
                 float(pos['notional']) for pos in data['futures_positions']
             )
             futures_pnl = sum(
                 float(pos['unPnl']) for pos in data['futures_positions']
             )
 
-            total_value = total_spot + total_margin + total_futures + futures_pnl
+            # Total futures value is wallet balance plus positions value
+            total_futures = total_futures_wallet + total_futures_positions + futures_pnl
+
+            total_value = total_spot + total_margin + total_futures
 
             logger.debug(f"Total value calculated: {total_value:.2f} USDT")
             logger.debug(
                 f"Breakdown - Spot: {total_spot:.2f}, Margin: {total_margin:.2f}, "
-                f"Futures: {total_futures:.2f} (PnL: {futures_pnl:.2f})"
+                f"Futures: {total_futures:.2f} (Wallet: {total_futures_wallet:.2f}, "
+                f"Positions: {total_futures_positions:.2f}, PnL: {futures_pnl:.2f})"
             )
 
             return {
                 'total_value': total_value,
                 'total_spot': total_spot,
                 'total_margin': total_margin,
-                'total_futures': total_futures + futures_pnl,
-                'futures_pnl': futures_pnl
+                'total_futures': total_futures,
+                'futures_breakdown': {
+                    'wallet_balance': total_futures_wallet,
+                    'positions_value': total_futures_positions,
+                    'unrealized_pnl': futures_pnl
+                }
             }
         except Exception as e:
             logger.error(f"Error calculating total value: {str(e)}\n{format_exc()}")
@@ -216,5 +240,9 @@ class AssetTracker:
                 'total_spot': 0,
                 'total_margin': 0,
                 'total_futures': 0,
-                'futures_pnl': 0
+                'futures_breakdown': {
+                    'wallet_balance': 0,
+                    'positions_value': 0,
+                    'unrealized_pnl': 0
+                }
             }
