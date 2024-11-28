@@ -1,0 +1,7 @@
+streamlit
+ccxt
+psycopg2-binary
+python-dotenv
+bcrypt
+pandas
+aiohttp
