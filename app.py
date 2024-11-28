@@ -1,25 +1,40 @@
-import streamlit as st
 import asyncio
-from database import UserManager, CredentialManager, init_db
+from traceback import format_exc
+
+import streamlit as st
+from loguru import logger
+
 from asset_tracker import AssetTracker
-import pandas as pd
+from database import CredentialManager, UserManager, init_db
+
+# Configure logger
+logger.add("app.log", rotation="500 MB", retention="10 days")
 
 # Initialize session state
 if 'user' not in st.session_state:
     st.session_state.user = None
 
 def login_user(username: str, password: str) -> bool:
+    logger.info(f"Login attempt for user: {username}")
     user = UserManager.verify_user(username, password)
     if user:
+        logger.info(f"Login successful for user: {username}")
         st.session_state.user = user
         return True
+    logger.warning(f"Failed login attempt for user: {username}")
     return False
 
 def logout_user():
     st.session_state.user = None
 
 def register_user(username: str, password: str) -> bool:
-    return UserManager.create_user(username, password)
+    logger.info(f"Registration attempt for username: {username}")
+    success = UserManager.create_user(username, password)
+    if success:
+        logger.info(f"Registration successful for username: {username}")
+    else:
+        logger.warning(f"Registration failed for username: {username}")
+    return success
 
 def render_login_section():
     st.subheader("Login / Register")
@@ -114,8 +129,10 @@ def render_credential_section():
                         st.error("Failed to delete credential")
 
 async def fetch_asset_data(credentials):
+    logger.info("Starting to fetch asset data")
     all_data = []
     for cred in credentials:
+        logger.debug(f"Fetching data for credential: {cred['label']}")
         tracker = AssetTracker(cred['api_key'], cred['api_secret'])
         try:
             data = await tracker.get_all_data()
@@ -137,8 +154,9 @@ async def fetch_asset_data(credentials):
                 'pnl_percentage': pnl_percentage
             })
         except Exception as e:
+            logger.error(f"Error fetching data for {cred['label']}: {str(e)} {format_exc()}")
             st.error(f"Error fetching data for {cred['label']}: {str(e)}")
-    
+    logger.info("Completed fetching asset data")
     return all_data
 
 def render_dashboard():
