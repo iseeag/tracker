@@ -75,34 +75,34 @@ def render_login_section():
 
 
 def render_credential_section():
-    st.subheader("凭证管理")
+    st.subheader("API管理")
 
     credentials = CredentialManager.get_credentials(st.session_state.user['id'])
 
-    with st.expander("添加新凭证"):
+    with st.expander("添加新API"):
         with st.form("add_credential"):
             label = st.text_input("标签")
             api_key = st.text_input("API KEY")
             api_secret = st.text_input("API SECRET", type="password")
             initial_value = st.number_input("初始投资额 (USD)", min_value=0.0)
-            submitted = st.form_submit_button("添加凭证")
+            submitted = st.form_submit_button("添加API")
 
             if submitted:
                 if CredentialManager.add_credential(
                         st.session_state.user['id'], api_key, api_secret,
                         initial_value, label
                 ):
-                    st.success("凭证添加成功！")
+                    st.success("API添加成功！")
                     st.rerun()
                 else:
-                    st.error("添加凭证失败")
+                    st.error("添加API失败")
 
     for cred in credentials:
-        with st.expander(f"凭证: {cred['label']}"):
+        with st.expander(f"API: {cred['label']}"):
             with st.form(f"edit_credential_{cred['id']}"):
                 new_label = st.text_input("标签", value=cred['label'])
-                new_api_key = st.text_input("API密钥", value=cred['api_key'])
-                new_api_secret = st.text_input("API密钥", value=cred['api_secret'], type="password")
+                new_api_key = st.text_input("API KEY", value=cred['api_key'])
+                new_api_secret = st.text_input("API SECRET", value=cred['api_secret'], type="password")
                 new_initial_value = st.number_input(
                     "初始投资额 (USD)",
                     value=float(cred['initial_value_usd']),
@@ -110,9 +110,9 @@ def render_credential_section():
                 )
                 col1, col2 = st.columns(2)
                 with col1:
-                    update = st.form_submit_button("更新凭证")
+                    update = st.form_submit_button("更新API")
                 with col2:
-                    delete = st.form_submit_button("删除凭证", type="primary")
+                    delete = st.form_submit_button("删除API", type="primary")
 
                 if update:
                     if CredentialManager.update_credential(
@@ -120,17 +120,17 @@ def render_credential_section():
                             new_api_key, new_api_secret,
                             new_initial_value, new_label
                     ):
-                        st.success("凭证更新成功！")
+                        st.success("API更新成功！")
                         st.rerun()
                     else:
-                        st.error("更新凭证失败")
+                        st.error("更新API失败")
 
                 if delete:
                     if CredentialManager.delete_credential(cred['id'], st.session_state.user['id']):
-                        st.success("凭证删除成功！")
+                        st.success("API删除成功！")
                         st.rerun()
                     else:
-                        st.error("删除凭证失败")
+                        st.error("删除API失败")
 
 
 async def fetch_asset_data(credentials):
@@ -168,7 +168,7 @@ def render_dashboard():
 
     credentials = CredentialManager.get_credentials(st.session_state.user['id'])
     if not credentials:
-        st.info("未找到凭证。请在凭证管理部分添加凭证。")
+        st.info("未找到API。请在API管理部分添加API。")
         return
 
     # Add refresh button in the header
@@ -271,7 +271,7 @@ def main():
     if not st.session_state.user:
         render_login_section()
     else:
-        tab1, tab2 = st.tabs(["仪表盘", "凭证管理"])
+        tab1, tab2 = st.tabs(["仪表盘", "API管理"])
 
         with tab1:
             render_dashboard()
