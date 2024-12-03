@@ -1,6 +1,5 @@
-import asyncio
 from traceback import format_exc
-from typing import Dict, List
+from typing import Dict
 
 from binance import AsyncClient, Client
 from loguru import logger
