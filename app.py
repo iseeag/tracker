@@ -116,7 +116,8 @@ def render_credential_section():
 
                 if update:
                     if CredentialManager.update_credential(
-                            cred['id'], new_api_key, new_api_secret,
+                            cred['id'], st.session_state.user['id'],
+                            new_api_key, new_api_secret,
                             new_initial_value, new_label
                     ):
                         st.success("凭证更新成功！")
@@ -125,7 +126,7 @@ def render_credential_section():
                         st.error("更新凭证失败")
 
                 if delete:
-                    if CredentialManager.delete_credential(cred['id']):  # todo: missing user_id
+                    if CredentialManager.delete_credential(cred['id'], st.session_state.user['id']):
                         st.success("凭证删除成功！")
                         st.rerun()
                     else:
