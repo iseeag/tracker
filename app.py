@@ -77,8 +77,8 @@ def render_credential_section():
     with st.expander("添加新凭证"):
         with st.form("add_credential"):
             label = st.text_input("标签")
-            api_key = st.text_input("API密钥")
-            api_secret = st.text_input("API密钥", type="password")
+            api_key = st.text_input("API KEY")
+            api_secret = st.text_input("API SECRET", type="password")
             initial_value = st.number_input("初始投资额 (USD)", min_value=0.0)
             submitted = st.form_submit_button("添加凭证")
             
