@@ -7,3 +7,4 @@ pandas
 aiohttp
 loguru
 ccxt
+gradio
