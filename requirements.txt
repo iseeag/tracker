@@ -9,3 +9,4 @@ loguru
 ccxt
 gradio
 sqlalchemy
+apscheduler
