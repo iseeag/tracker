@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 from gr_db import (Account, AccountBalanceHistory, SessionLocal, Strategy,
-                   User, user_accounts)
+                   User, UserAccountAssociation)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -57,56 +57,53 @@ def get_db():
 
 # User-Type Methods
 
-def get_preset_balance_tables(user_name: str, db: Session):
-    linked_accounts = db.query(user_accounts).filter(user_accounts.c.user_name == user_name).all()
+def get_preset_balance_tables(user_id: str, db: Session):
+    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
+    account_ids = [link.account_id for link in linked_accounts]
+    strategies = db.query(Strategy).filter(Strategy.account_id.in_(account_ids)).all()
     preset_balances = []
-    for account in linked_accounts:
-        strategies = db.query(Strategy).filter(Strategy.account_name == account.account_name).all()
-        for strategy in strategies:
-            preset_balances.append({
-                'account_name': strategy.account_name,
-                'strategy_name': strategy.strategy_name,
-                'preset_balance': strategy.preset_balance
-            })
+    for strategy in strategies:
+        preset_balances.append({
+            'account_id': strategy.account_id,
+            'strategy_name': strategy.strategy_name,
+            'preset_balance': strategy.preset_balance
+        })
     return preset_balances
 
 
-def get_realtime_balance_tables(user_name: str, db: Session):
-    linked_accounts = db.query(user_accounts).filter(user_accounts.c.user_name == user_name).all()
+def get_realtime_balance_tables(user_id: str, db: Session):
+    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
+    account_ids = [link.account_id for link in linked_accounts]
+    strategies = db.query(Strategy).filter(Strategy.account_id.in_(account_ids)).all()
     realtime_balances = []
-    for account in linked_accounts:
-        strategies = db.query(Strategy).filter(Strategy.account_name == account.account_name).all()
-        for strategy in strategies:
-            exchange_class = getattr(ccxt, strategy.exchange_type.lower())
-            exchange = exchange_class({
-                'apiKey': strategy.api_key,
-                'secret': strategy.secret_key,
-                'password': strategy.passphrase
-            })
-            balance = exchange.fetch_balance()
-            realtime_balances.append({
-                'account_name': strategy.account_name,
-                'strategy_name': strategy.strategy_name,
-                'realtime_balance': balance['total']
-            })
+    for strategy in strategies:
+        exchange_class = getattr(ccxt, strategy.exchange_type.lower())
+        exchange = exchange_class({
+            'apiKey': strategy.api_key,
+            'secret': strategy.secret_key,
+            'password': strategy.passphrase
+        })
+        balance = exchange.fetch_balance()
+        realtime_balances.append({
+            'account_id': strategy.account_id,
+            'strategy_name': strategy.strategy_name,
+            'realtime_balance': balance['total']
+        })
     return realtime_balances
 
 
-def get_account_balance_history_tables(user_name: str, db: Session, page_number: int = 1, page_size: int = 10):
-    linked_accounts = db.query(user_accounts).filter(user_accounts.c.user_name == user_name).all()
-    balance_history = []
-    for account in linked_accounts:
-        history = db.query(AccountBalanceHistory).filter(
-            AccountBalanceHistory.account_name == account.account_name).offset((page_number - 1) * page_size).limit(
-            page_size).all()
-        for record in history:
-            balance_history.append({
-                'account_name': record.account_name,
-                'strategy_name': record.strategy_name,
-                'balance': record.balance,
-                'timestamp': record.timestamp
-            })
-    return balance_history
+def get_account_balance_history_tables(user_id: str, db: Session, page_number: int = 1, page_size: int = 10):
+    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
+    account_ids = [link.account_id for link in linked_accounts]
+    balance_history = db.query(AccountBalanceHistory).filter(
+        AccountBalanceHistory.account_id.in_(account_ids)).offset((page_number - 1) * page_size).limit(
+        page_size).all()
+    return [{
+        'account_id': record.account_id,
+        'strategy_name': record.strategy_name,
+        'balance': record.balance,
+        'timestamp': record.timestamp
+    } for record in balance_history]
 
 
 # Admin-Type Methods
@@ -120,8 +117,8 @@ def create_account(account_name: str, start_date: str, db: Session):
     return new_account
 
 
-def delete_account(account_name: str, db: Session):
-    account = db.query(Account).filter(Account.account_name == account_name).first()
+def delete_account(account_id: str, db: Session):
+    account = db.query(Account).filter(Account.id == account_id).first()
     if account:
         db.delete(account)
         db.commit()
@@ -129,8 +126,8 @@ def delete_account(account_name: str, db: Session):
     return False
 
 
-def update_account(account_name: str, start_date: str, db: Session):
-    account = db.query(Account).filter(Account.account_name == account_name).first()
+def update_account(account_id: str, start_date: str, db: Session):
+    account = db.query(Account).filter(Account.id == account_id).first()
     if account:
         account.start_date = start_date
         db.commit()
@@ -138,9 +135,9 @@ def update_account(account_name: str, start_date: str, db: Session):
     return None
 
 
-def create_strategy(account_name: str, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
+def create_strategy(account_id: str, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
                     exchange_type: str, preset_balance: float, db: Session):
-    new_strategy = Strategy(account_name=account_name, strategy_name=strategy_name, api_key=api_key,
+    new_strategy = Strategy(account_id=account_id, strategy_name=strategy_name, api_key=api_key,
                             secret_key=secret_key, passphrase=passphrase, exchange_type=exchange_type,
                             preset_balance=preset_balance)
     db.add(new_strategy)
@@ -148,8 +145,8 @@ def create_strategy(account_name: str, strategy_name: str, api_key: str, secret_
     return new_strategy
 
 
-def delete_strategy(strategy_name: str, db: Session):
-    strategy = db.query(Strategy).filter(Strategy.strategy_name == strategy_name).first()
+def delete_strategy(strategy_id: str, db: Session):
+    strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
     if strategy:
         db.delete(strategy)
         db.commit()
@@ -157,9 +154,9 @@ def delete_strategy(strategy_name: str, db: Session):
     return False
 
 
-def update_strategy(strategy_name: str, api_key: str, secret_key: str, passphrase: str, exchange_type: str,
+def update_strategy(strategy_id: str, api_key: str, secret_key: str, passphrase: str, exchange_type: str,
                     preset_balance: float, db: Session):
-    strategy = db.query(Strategy).filter(Strategy.strategy_name == strategy_name).first()
+    strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
     if strategy:
         strategy.api_key = api_key
         strategy.secret_key = secret_key
@@ -180,8 +177,8 @@ def create_user(name: str, login_token: str, db: Session):
     return new_user
 
 
-def delete_user(name: str, db: Session):
-    user = db.query(User).filter(User.name == name).first()
+def delete_user(user_id: str, db: Session):
+    user = db.query(User).filter(User.id == user_id).first()
     if user:
         db.delete(user)
         db.commit()
@@ -189,8 +186,8 @@ def delete_user(name: str, db: Session):
     return False
 
 
-def update_user(name: str, login_token: str, db: Session):
-    user = db.query(User).filter(User.name == name).first()
+def update_user(user_id: str, login_token: str, db: Session):
+    user = db.query(User).filter(User.id == user_id).first()
     if user:
         user.login_token = login_token
         db.commit()
@@ -198,22 +195,22 @@ def update_user(name: str, login_token: str, db: Session):
     return None
 
 
-def link_account_to_user(user_name: str, account_name: str, db: Session):
-    user_account_link = db.query(user_accounts).filter(user_accounts.c.user_name == user_name,
-                                                       user_accounts.c.account_name == account_name).first()
+def link_account_to_user(user_id: str, account_id: str, db: Session):
+    user_account_link = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id,
+                                                               UserAccountAssociation.account_id == account_id).first()
     if not user_account_link:
-        db.execute(user_accounts.insert().values(user_name=user_name, account_name=account_name))
+        new_link = UserAccountAssociation(user_id=user_id, account_id=account_id)
+        db.add(new_link)
         db.commit()
         return True
     return False
 
 
-def unlink_account_from_user(user_name: str, account_name: str, db: Session):
-    user_account_link = db.query(user_accounts).filter(user_accounts.c.user_name == user_name,
-                                                       user_accounts.c.account_name == account_name).first()
+def unlink_account_from_user(user_id: str, account_id: str, db: Session):
+    user_account_link = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id,
+                                                               UserAccountAssociation.account_id == account_id).first()
     if user_account_link:
-        db.execute(user_accounts.delete().where(user_accounts.c.user_name == user_name,
-                                                user_accounts.c.account_name == account_name))
+        db.delete(user_account_link)
         db.commit()
         return True
     return False
@@ -221,14 +218,17 @@ def unlink_account_from_user(user_name: str, account_name: str, db: Session):
 
 # Backend Utility Methods
 
-def get_linked_accounts(user_name: str, db: Session):
-    linked_accounts = db.query(user_accounts).filter(user_accounts.c.user_name == user_name).all()
-    return [account.account_name for account in linked_accounts]
+def get_linked_accounts(user_id: str, db: Session):
+    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
+    account_ids = [link.account_id for link in linked_accounts]
+    accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
+    return accounts
 
 
-def get_account_information(account_names: list, db: Session):
-    accounts_info = db.query(Account).filter(Account.account_name.in_(account_names)).all()
+def get_account_information(account_ids: list, db: Session):
+    accounts_info = db.query(Account).filter(Account.id.in_(account_ids)).all()
     return [{
+        'account_id': account.id,
         'account_name': account.account_name,
         'start_date': account.start_date
     } for account in accounts_info]
@@ -252,7 +252,7 @@ def sum_balance_tables(balances: list):
 def daily_balance_snapshot(db: Session):
     accounts = db.query(Account).all()
     for account in accounts:
-        strategies = db.query(Strategy).filter(Strategy.account_name == account.account_name).all()
+        strategies = db.query(Strategy).filter(Strategy.account_id == account.id).all()
         for strategy in strategies:
             exchange_class = getattr(ccxt, strategy.exchange_type.lower())
             exchange = exchange_class({
@@ -264,7 +264,7 @@ def daily_balance_snapshot(db: Session):
             total_balance = balance['total']
             for currency, amount in total_balance.items():
                 new_record = AccountBalanceHistory(
-                    account_name=account.account_name,
+                    account_id=account.id,
                     strategy_name=strategy.strategy_name,
                     balance=amount,
                     timestamp=datetime.now()
