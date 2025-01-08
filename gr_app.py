@@ -4,7 +4,7 @@ import pandas as pd
 from gr_backend import (admin_login, create_account, create_user,
                         delete_account, delete_user,
                         get_account_balance_history_tables, get_db,
-                        get_preset_balance_tables, get_realtime_balance_tables,
+                        get_preset_balances, get_realtime_balances,
                         link_account_to_user, sum_balance_tables,
                         update_account, update_user, user_login)
 
@@ -98,8 +98,8 @@ def user_interface():
 
     def get_balances(user_name):
         db = next(get_db())
-        preset_balances = get_preset_balance_tables(user_name, db)
-        realtime_balances = get_realtime_balance_tables(user_name, db)
+        preset_balances = get_preset_balances(user_name, db)
+        realtime_balances = get_realtime_balances(user_name, db)
         summed_balances = sum_balance_tables(preset_balances + realtime_balances)
 
         # Create DataFrames for tables

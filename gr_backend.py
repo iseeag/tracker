@@ -1,8 +1,8 @@
 import hashlib
 import os
 import uuid
-from datetime import date, datetime
-from typing import Dict, List
+from datetime import datetime
+from typing import Dict, List, Tuple
 
 import ccxt
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -10,8 +10,10 @@ from dotenv import load_dotenv
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from gr_db import (Account, AccountBalanceHistory, SessionLocal, Strategy,
-                   User, UserAccountAssociation)
+from gr_db import (Account, AccountBalanceHistory, AccountBalances,
+                   PresetAccountBalance, RealtimeAccountBalance, SessionLocal,
+                   Strategy, StrategyBalance, StrategyBalanceRecord, User,
+                   UserAccountAssociation)
 
 load_dotenv()
 current_session_tokens = {}
@@ -85,36 +87,48 @@ def retrieve_multi_info(user_id: str, db: Session):
     return accounts, strategies
 
 
-def get_preset_balance_tables(token: str, db: Session) -> Dict[str, Dict]:
+def get_preset_balances(token: str, db: Session) -> Dict[str, PresetAccountBalance]:
     user_id = get_user_id(token)
     accounts, strategies = retrieve_multi_info(user_id, db)
-    preset_balances = {str(a.account_name): {'start_date': a.start_date,
-                                             'strategies': [
-                                                 {
-                                                     'strategy_name': strategy.strategy_name,
-                                                     'preset_balance': strategy.preset_balance
-                                                 } for strategy in strategies if strategy.account_id == a.id]}
-                       for a in accounts}
+    # preset_balances = {str(a.account_name): {'start_date': a.start_date,
+    #                                          'strategies': [
+    #                                              {
+    #                                                  'strategy_name': strategy.strategy_name,
+    #                                                  'preset_balance': strategy.preset_balance
+    #                                              } for strategy in strategies if strategy.account_id == a.id]}
+    #                    for a in accounts}
+    preset_balances = {str(a.account_name): PresetAccountBalance(
+        name=str(a.account_name),
+        start_date=str(a.start_date),
+        strategy_balances=[
+            StrategyBalance(name=str(s.strategy_name),
+                            balance=float(s.preset_balance))
+            for s in strategies if s.account_id == a.id])
+        for a in accounts}
     return preset_balances
 
 
-def get_realtime_balance_tables(token: str, db: Session) -> Dict[str, List]:
+def get_realtime_balances(token: str, db: Session) -> Dict[str, RealtimeAccountBalance]:
     user_id = get_user_id(token)
     accounts, strategies = retrieve_multi_info(user_id, db)
     realtime_balances = {}
+    # for account in accounts:
+    #     strategies_bal = []
+    #     for strategy in [s for s in strategies if s.account_id == account.id]:
+    #         strategy_balance = retrieve_strategy_balance(strategy)
+    #         data = {'strategy_name': strategy.strategy_name,
+    #                 'realtime_balance': strategy_balance}
+    #         strategies_bal.append(data)
+    #         realtime_strategy_balances.append(data)
+    #     realtime_balances[str(account.account_name)] = strategies_bal
     for account in accounts:
-        strategies_bal = []
-        for strategy in [s for s in strategies if s.account_id == account.id]:
-            exchange_class = getattr(ccxt, strategy.exchange_type.lower())
-            exchange = exchange_class({
-                'apiKey': strategy.api_key,
-                'secret': strategy.secret_key,
-                'password': strategy.passphrase
-            })
-            balance = exchange.fetch_balance()
-            strategies_bal.append({'strategy_name': strategy.strategy_name,
-                                   'realtime_balance': balance['total']})
-        realtime_balances[str(account.account_name)] = strategies_bal
+        records = [StrategyBalance(
+            name=str(strategy.strategy_name),
+            balance=float(retrieve_strategy_balance(strategy))
+        ) for strategy in [s for s in strategies if s.account_id == account.id]]
+        realtime_balance = RealtimeAccountBalance(name=str(account.account_name),
+                                                  strategy_balances=records)
+        realtime_balances[str(account.account_name)] = realtime_balance
     return realtime_balances
 
 
@@ -130,19 +144,30 @@ def get_account_balance_history_tables(
         page_size).all()
     account_bal_hist = {}
     for account in accounts:
-        records = [{
-            'strategy_name': strategies_names[record.strategy_id],
-            'balance': record.balance,
-            'timestamp': record.timestamp
-        } for record in balance_history if record.account_id == account.id]
+        # records = [{
+        #     'strategy_name': strategies_names[record.strategy_id],
+        #     'balance': record.balance,
+        #     'timestamp': record.timestamp
+        # } for record in balance_history if record.account_id == account.id]
+        records = [StrategyBalanceRecord(
+            name=str(strategies_names[record.strategy_id]),
+            account_name=str(account.account_name),
+            balance=float(record.balance),
+            timestamp=str(record.timestamp)
+        ) for record in balance_history if record.account_id == account.id]
         account_bal_hist[str(account.account_name)] = records
     return account_bal_hist
 
 
 # Admin-Type Methods
 # Account and Strategy Management
+def check_admin_token(token: str) -> bool:
+    if current_session_tokens.get('admin') != token:
+        raise Exception("Unauthorized access")
 
-def create_account(account_name: str, start_date: str, db: Session):
+
+def create_account(token: str, account_name: str, start_date: str, db: Session):
+    check_admin_token(token)
     new_account = Account(account_name=account_name,
                           start_date=datetime.strptime(start_date, "%m/%d/%Y").date())
     db.add(new_account)
@@ -150,16 +175,26 @@ def create_account(account_name: str, start_date: str, db: Session):
     return new_account
 
 
-def delete_account(account_name: str, db: Session):
+def delete_account(token: str, account_name: str, db: Session):
+    check_admin_token(token)
     account = db.query(Account).filter(Account.account_name == account_name).first()
     if account:
         db.delete(account)
+        user_account_links = db.query(UserAccountAssociation).filter(
+            UserAccountAssociation.account_id == account.id).all()
+        for link in user_account_links:
+            db.delete(link)
+        strategies = db.query(Strategy).filter(Strategy.account_id == account.id).all()
+        for strategy in strategies:
+            db.delete(strategy)
         db.commit()
+        logger.info(f"Deleted account {account_name} and its strategies and associations")
         return True
     return False
 
 
-def update_account(account_name: str, start_date: str, db: Session):
+def update_account(token: str, account_name: str, start_date: str, db: Session):
+    check_admin_token(token)
     account = db.query(Account).filter(Account.id == account_name).first()
     if account:
         account.start_date = start_date
@@ -168,8 +203,9 @@ def update_account(account_name: str, start_date: str, db: Session):
     return None
 
 
-def create_strategy(account_id: str, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
+def create_strategy(token: str, account_id: str, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
                     exchange_type: str, preset_balance: float, db: Session):
+    check_admin_token(token)
     new_strategy = Strategy(account_id=account_id, strategy_name=strategy_name, api_key=api_key,
                             secret_key=secret_key, passphrase=passphrase, exchange_type=exchange_type,
                             preset_balance=preset_balance)
@@ -201,6 +237,17 @@ def update_strategy(strategy_id: str, api_key: str, secret_key: str, passphrase:
     return None
 
 
+def retrieve_strategy_balance(strategy: Strategy) -> float:
+    exchange_class = getattr(ccxt, strategy.exchange_type.lower())
+    exchange = exchange_class({
+        'apiKey': strategy.api_key,
+        'secret': strategy.secret_key,
+        'password': strategy.passphrase
+    })
+    balance = exchange.fetch_balance()
+    return balance['total']
+
+
 # User Management
 
 def create_user(name: str, login_token: str, db: Session):
@@ -214,7 +261,12 @@ def delete_user(user_id: str, db: Session):
     user = db.query(User).filter(User.id == user_id).first()
     if user:
         db.delete(user)
+        user_account_links = db.query(UserAccountAssociation).filter(
+            UserAccountAssociation.user_id == user_id).all()
+        for link in user_account_links:
+            db.delete(link)
         db.commit()
+        logger.info(f"Deleted user {user_id} and its associations")
         return True
     return False
 
@@ -248,33 +300,24 @@ def set_linked_account_to_user(user_name: str, account_ids: List[str], db: Sessi
 
 # Backend Utility Methods
 
-def get_linked_accounts(user_id: str, db: Session):
-    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
+def get_linked_accounts(user_name: str, db: Session):
+    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_name).all()
     account_ids = [link.account_id for link in linked_accounts]
     accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
     return accounts
 
 
-def get_account_information(account_ids: list, db: Session):
-    accounts_info = db.query(Account).filter(Account.id.in_(account_ids)).all()
-    return [{
-        'account_id': account.id,
-        'account_name': account.account_name,
-        'start_date': account.start_date
-    } for account in accounts_info]
-
-
-def sum_balance_tables(balances: list):
-    total_preset_balance = sum(balance['preset_balance'] for balance in balances if 'preset_balance' in balance)
-    total_realtime_balance = sum(balance['realtime_balance'] for balance in balances if 'realtime_balance' in balance)
-    total_difference = total_realtime_balance - total_preset_balance
-    total_percentage_difference = (total_difference / total_preset_balance) * 100 if total_preset_balance else 0
-    return {
-        'total_preset_balance': total_preset_balance,
-        'total_realtime_balance': total_realtime_balance,
-        'total_difference': total_difference,
-        'total_percentage_difference': total_percentage_difference
-    }
+# def sum_balance_tables(balances: Dict) -> Dict:
+#     total_preset_balance = sum(balance['preset_balance'] for balance in balances if 'preset_balance' in balance)
+#     total_realtime_balance = sum(balance['realtime_balance'] for balance in balances if 'realtime_balance' in balance)
+#     total_difference = total_realtime_balance - total_preset_balance
+#     total_percentage_difference = (total_difference / total_preset_balance) * 100 if total_preset_balance else 0
+#     return {
+#         'total_preset_balance': total_preset_balance,
+#         'total_realtime_balance': total_realtime_balance,
+#         'total_difference': total_difference,
+#         'total_percentage_difference': total_percentage_difference
+#     }
 
 
 # Scheduled Tasks with APScheduler
@@ -284,29 +327,23 @@ def daily_balance_snapshot(db: Session):
     for account in accounts:
         strategies = db.query(Strategy).filter(Strategy.account_id == account.id).all()
         for strategy in strategies:
-            exchange_class = getattr(ccxt, strategy.exchange_type.lower())
-            exchange = exchange_class({
-                'apiKey': strategy.api_key,
-                'secret': strategy.secret_key,
-                'password': strategy.passphrase
-            })
-            balance = exchange.fetch_balance()
-            total_balance = balance['total']
-            for currency, amount in total_balance.items():
-                new_record = AccountBalanceHistory(
-                    account_id=account.id,
-                    strategy_name=strategy.strategy_name,
-                    balance=amount,
-                    timestamp=datetime.now()
-                )
-                db.add(new_record)
+            strategy_balance = retrieve_strategy_balance(strategy)
+            new_record = AccountBalanceHistory(
+                account_id=str(account.id),
+                strategy_id=str(strategy.id),
+                balance=strategy_balance,
+                timestamp=datetime.now()
+            )
+            db.add(new_record)
+        logger.info(f"Daily balance snapshot taken for account {account.account_name}")
     db.commit()
 
 
-def start_scheduler():
+def start_scheduler(hour=0, minute=0):
     scheduler = BackgroundScheduler()
-    scheduler.add_job(lambda: daily_balance_snapshot(next(get_db())), 'cron', hour=0, minute=0)
+    scheduler.add_job(lambda: daily_balance_snapshot(next(get_db())), 'cron', hour=hour, minute=minute)
     scheduler.start()
+    logger.info(f"Scheduler started for every day at {hour}:{minute}")
 
 # Uncomment the line below to start the scheduler when running this module
 # start_scheduler()

@@ -1,6 +1,9 @@
 import os
+from typing import List
 
+import pandas as pd
 from dotenv import load_dotenv
+from pydantic import BaseModel
 from sqlalchemy import Column, Date, Float, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -65,6 +68,62 @@ class AccountBalanceHistory(Base):
     strategy_id = Column(String)
     balance = Column(Float)
     timestamp = Column(Date)
+
+
+class StrategyBalance(BaseModel):
+    name: str
+    balance: float
+
+
+class AccountBalances(BaseModel):
+    name: str
+    strategy_balances: list[StrategyBalance]
+
+    def from_strategies(self, name: str, strategies: List[Strategy]) -> 'AccountBalances':
+        ...
+
+
+class PresetAccountBalance(AccountBalances):
+    start_date: str
+
+    def to_table(self) -> pd.DataFrame:
+        ...
+
+    @classmethod
+    def sum_to_table(cls, balances: List['PresetAccountBalance']) -> pd.DataFrame:
+        # sum_balance = [{"strategy_name": s.strategy_name,
+        #                 "total_preset_balance": sum([s.preset_balance for s in strategies
+        #                                              if s.strategy_name == s.strategy_name])
+        #                 } for s in strategies]
+        ...
+
+
+class RealtimeAccountBalance(AccountBalances):
+    ...
+
+    def to_table(self, preset_balance: PresetAccountBalance) -> pd.DataFrame:
+        ...
+
+    @classmethod
+    def sum_to_table(cls,
+                     realtime_balances: List['RealtimeAccountBalance'],
+                     preset_balances: List[PresetAccountBalance]) -> pd.DataFrame:
+        # realtime_strategy_balances = []
+        # sum_balance = [{"strategy_name": s['strategy_name'],
+        #                 "realtime_balance": sum([s['realtime_balance'] for s in realtime_strategy_balances
+        #                                          if s['strategy_name'] == s['strategy_name']])
+        #                 } for s in strategies]
+
+        ...
+
+
+class StrategyBalanceRecord(StrategyBalance):
+    account_name: str
+    timestamp: str
+
+    @classmethod
+    def to_table(cls, preset_balance: PresetAccountBalance, records: List['StrategyBalanceRecord']) -> pd.DataFrame:
+        ...
 
 
 # Create tables
