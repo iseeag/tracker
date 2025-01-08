@@ -5,73 +5,97 @@ from gr_backend import (admin_login, create_account, create_user,
                         delete_account, delete_user,
                         get_account_balance_history_tables, get_db,
                         get_preset_balances, get_realtime_balances,
-                        link_account_to_user, sum_balance_tables,
                         update_account, update_user, user_login)
 
 
 # Initialize Gradio interface
 def admin_interface():
+    session_token = gr.State("")  # Initialize empty session token
+
     def login(master_token):
-        if admin_login(master_token):
-            return "Admin login successful!"
-        else:
-            return "Admin login failed."
+        token = admin_login(master_token)
+        if not token:
+            return "", "Login failed"
+        return token, "Login successful!"
 
-    def add_account(account_name, start_date):
-        db = next(get_db())
-        create_account(account_name, start_date, db)
-        return "Account added successfully!"
 
-    def remove_account(account_name):
+    def add_account(token, account_name, start_date):
         db = next(get_db())
-        if delete_account(account_name, db):
-            return "Account deleted successfully!"
-        return "Account deletion failed."
+        try:
+            create_account(token, account_name, start_date, db)
+            return "Account added successfully!"
+        except Exception as e:
+            return f"Failed to add account: {str(e)}"
 
-    def modify_account(account_name, start_date):
+    def remove_account(token, account_name):
         db = next(get_db())
-        if update_account(account_name, start_date, db):
-            return "Account updated successfully!"
-        return "Account update failed."
+        try:
+            if delete_account(token, account_name, db):
+                return "Account deleted successfully!"
+            return "Account deletion failed."
+        except Exception as e:
+            return f"Failed to delete account: {str(e)}"
 
-    def add_user(name, login_token):
+    def modify_account(token, account_name, start_date):
         db = next(get_db())
-        create_user(name, login_token, db)
-        return "User added successfully!"
+        try:
+            if update_account(token, account_name, start_date, db):
+                return "Account updated successfully!"
+            return "Account update failed."
+        except Exception as e:
+            return f"Failed to update account: {str(e)}"
 
-    def remove_user(name):
+    def add_user(token, name, login_token):
         db = next(get_db())
-        if delete_user(name, db):
-            return "User deleted successfully!"
-        return "User deletion failed."
+        try:
+            create_user(token, name, login_token, db)
+            return "User added successfully!"
+        except Exception as e:
+            return f"Failed to add user: {str(e)}"
 
-    def modify_user(name, login_token):
+    def remove_user(token, name):
         db = next(get_db())
-        if update_user(name, login_token, db):
-            return "User updated successfully!"
-        return "User update failed."
+        try:
+            if delete_user(token, name, db):
+                return "User deleted successfully!"
+            return "User deletion failed."
+        except Exception as e:
+            return f"Failed to delete user: {str(e)}"
+
+    def modify_user(token, name, login_token):
+        db = next(get_db())
+        try:
+            if update_user(token, name, login_token, db):
+                return "User updated successfully!"
+            return "User update failed."
+        except Exception as e:
+            return f"Failed to update user: {str(e)}"
 
     with gr.Blocks() as admin_ui:
         gr.Markdown("## Admin Login")
-        master_token_input = gr.Textbox(label="Master Token")
+        master_token_input = gr.Textbox(label="Master Token", type="password")
         login_button = gr.Button("Login")
-        login_output = gr.Textbox(label="Status")
+        login_output = gr.Textbox(label="Status", value="Please login first!")
 
-        login_button.click(fn=login, inputs=[master_token_input], outputs=[login_output])
+        login_button.click(fn=login, inputs=[master_token_input], outputs=[session_token, login_output])
 
         gr.Markdown("## Account Management")
         account_name_input = gr.Textbox(label="Account Name")
-        start_date_input = gr.Textbox(label="Start Date")
+        start_date_input = gr.Textbox(label="Start Date (MM/DD/YYYY)")
         add_account_button = gr.Button("Add Account")
         delete_account_button = gr.Button("Delete Account")
         update_account_button = gr.Button("Update Account")
         account_output = gr.Textbox(label="Account Status")
 
-        add_account_button.click(fn=add_account, inputs=[account_name_input, start_date_input],
-                                 outputs=[account_output])
-        delete_account_button.click(fn=remove_account, inputs=[account_name_input], outputs=[account_output])
-        update_account_button.click(fn=modify_account, inputs=[account_name_input, start_date_input],
-                                    outputs=[account_output])
+        add_account_button.click(fn=add_account, 
+                               inputs=[session_token, account_name_input, start_date_input],
+                               outputs=[account_output])
+        delete_account_button.click(fn=remove_account, 
+                                  inputs=[session_token, account_name_input], 
+                                  outputs=[account_output])
+        update_account_button.click(fn=modify_account, 
+                                  inputs=[session_token, account_name_input, start_date_input],
+                                  outputs=[account_output])
 
         gr.Markdown("## User Management")
         user_name_input = gr.Textbox(label="User Name")
@@ -81,9 +105,15 @@ def admin_interface():
         update_user_button = gr.Button("Update User")
         user_output = gr.Textbox(label="User Status")
 
-        add_user_button.click(fn=add_user, inputs=[user_name_input, login_token_input], outputs=[user_output])
-        delete_user_button.click(fn=remove_user, inputs=[user_name_input], outputs=[user_output])
-        update_user_button.click(fn=modify_user, inputs=[user_name_input, login_token_input], outputs=[user_output])
+        add_user_button.click(fn=add_user, 
+                            inputs=[session_token, user_name_input, login_token_input], 
+                            outputs=[user_output])
+        delete_user_button.click(fn=remove_user, 
+                               inputs=[session_token, user_name_input], 
+                               outputs=[user_output])
+        update_user_button.click(fn=modify_user, 
+                               inputs=[session_token, user_name_input, login_token_input], 
+                               outputs=[user_output])
 
     return admin_ui
 
