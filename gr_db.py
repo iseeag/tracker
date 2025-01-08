@@ -1,8 +1,10 @@
-from sqlalchemy import create_engine, Column, String, Date, Float, ForeignKey, Table
+import os
+
+from dotenv import load_dotenv
+from sqlalchemy import (Column, Date, Float, ForeignKey, String, Table,
+                        create_engine)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
-import os
-from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
