@@ -1,15 +1,15 @@
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import (Column, Date, Float, ForeignKey, String, Table,
-                        create_engine)
+from sqlalchemy import (Column, Date, Float, String, create_engine)
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Database connection
+APP_PREFIX = 'gr_'
 DATABASE_URL = os.getenv('DATABASE_URL')
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -18,21 +18,19 @@ Base = declarative_base()
 
 # Accounts Table
 class Account(Base):
-    __tablename__ = 'accounts'
+    __tablename__ = APP_PREFIX + 'accounts'
 
-    account_name = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True, index=True)
+    account_name = Column(String)
     start_date = Column(Date)
-
-    strategies = relationship('Strategy', back_populates='account')
-    users = relationship('User', secondary='user_accounts', back_populates='accounts')
 
 
 # Strategies Table
 class Strategy(Base):
-    __tablename__ = 'strategies'
+    __tablename__ = APP_PREFIX + 'strategies'
 
     id = Column(String, primary_key=True, index=True)
-    account_name = Column(String, ForeignKey('accounts.account_name'))
+    account_id = Column(String)
     strategy_name = Column(String)
     api_key = Column(String)
     secret_key = Column(String)
@@ -40,34 +38,30 @@ class Strategy(Base):
     exchange_type = Column(String)
     preset_balance = Column(Float)
 
-    account = relationship('Account', back_populates='strategies')
-
 
 # Users Table
 class User(Base):
-    __tablename__ = 'users'
+    __tablename__ = APP_PREFIX + 'users'
 
-    name = Column(String, primary_key=True, index=True)
+    id = Column(String, primary_key=True, index=True)
+    name = Column(String)
     login_token = Column(String)
 
-    accounts = relationship('Account', secondary='user_accounts', back_populates='users')
 
+class UserAccountAssociation(Base):
+    __tablename__ = APP_PREFIX + 'user_accounts_association'
 
-# User_Accounts Association Table
-user_accounts = Table(
-    'user_accounts', Base.metadata,
-    Column('user_name', String, ForeignKey('users.name')),
-    Column('account_name', String, ForeignKey('accounts.account_name'))
-)
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String)
+    account_id = Column(String)
 
 
 # Account_Balance_History Table
 class AccountBalanceHistory(Base):
-    __tablename__ = 'account_balance_history'
+    __tablename__ = APP_PREFIX + 'account_balance_history'
 
     id = Column(String, primary_key=True, index=True)
-    account_name = Column(String, ForeignKey('accounts.account_name'))
-    strategy_name = Column(String)
+    strategy_id = Column(String)
     balance = Column(Float)
     timestamp = Column(Date)
 
