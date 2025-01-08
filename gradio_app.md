@@ -1,5 +1,8 @@
 # gradio asset tracker app requirements
 
+frontend on gr_app.py
+backend on gr_backend.py
+
 ## Administrator Tab
 
 - auth
@@ -24,18 +27,20 @@
 	- login with token (then save auth token to session state)
 	- logout (clear session state)
 		- no registration needed
-- display a summed `account balance table` for all linked accounts
+- display a summed `preset balance table` and a summed `realtime balance table` of all linked accounts
 - display linked accounts one by one
 	- a `preset balance table`
-  - a `realtime balance table`
-  - a `account balance history table` with pagination
+	- a `realtime balance table`
+	- a `account balance history table` with pagination
 
 ## Monolith Backend
 
 - use pg to store data, credentials in .env file
 	- account table: account name, start date
-	- strategy table: account name, strategy name, api-key, secret-key, balance
+	- strategy table: account name, strategy name, api-key, secret-key, passphrase, exchange type (bitget or binance),
+	  preset balance
 	- user table: name, login token, linked accounts
+	- account balance table: account name, strategy name, balance, timestamp
 - login: generate and keep a session token for login (admin type and user type)
 - logout: clear session token
 - each frontend facing methods(require session token):
@@ -65,7 +70,7 @@ Create from preset balance table and realtime balance table:
 
 ### Account balance history table Frontend Structure
 
-history table will need to show all strategies in one row, therefore shows columns: date, strategy1 balance, strategy2
-balance, ..., total balance, strategy1 balance difference,strategy2 balance difference, ..., total balance difference,
-strategy1 balance percentage difference, strategy2 balance percentage difference, ..., total balance percentage
-difference
+Create from account balance table, the account balance history table will need to show all strategies in one row, it
+shows columns: date, strategy1 balance, strategy2 balance, ..., total balance, strategy1 balance difference,strategy2
+balance difference, ..., total balance difference, strategy1 balance percentage difference, strategy2 balance percentage
+difference, ..., total balance percentage difference
