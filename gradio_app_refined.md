@@ -4,6 +4,7 @@ Develop an asset tracker application using **Gradio** with the following structu
 
 - **Frontend**: `gr_app.py`
 - **Backend**: `gr_backend.py`
+- **Database**: `gr_db.py`
 
 ## Overview
 
