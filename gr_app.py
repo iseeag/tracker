@@ -1,7 +1,9 @@
+from typing import Tuple
+
 import gradio as gr
 import pandas as pd
 
-from gr_backend import (admin_login, create_account, create_user,
+from gr_backend import (admin_login, create_account, create_user, logout,
                         delete_account, delete_user,
                         get_account_balance_history_tables, get_db,
                         get_preset_balances, get_realtime_balances,
@@ -12,11 +14,16 @@ from gr_backend import (admin_login, create_account, create_user,
 def admin_interface():
     session_token = gr.State("")  # Initialize empty session token
 
-    def login(master_token):
+    def login(master_token) -> Tuple[str, str]:
         token = admin_login(master_token)
         if not token:
             return "", "Login failed"
         return token, "Login successful!"
+
+    def logout_(token) -> Tuple[str, str]:
+        if logout(token):
+            return "", "Logout successful!"
+        return "", "Logout failed"
 
     def add_account(token, account_name, start_date):
         db = next(get_db())
@@ -72,11 +79,15 @@ def admin_interface():
 
     with gr.Blocks() as admin_ui:
         gr.Markdown("## Admin Login")
-        master_token_input = gr.Textbox(label="Master Token", type="password")
-        login_button = gr.Button("Login")
-        login_output = gr.Textbox(label="Status", value="Please login first!")
+        with gr.Row():
+            login_output = gr.Textbox(label="Status", value="Please login first!")
+            master_token_input = gr.Textbox(label="Master Token", type="password", scale=2)
+            with gr.Column():
+                login_button = gr.Button("Login")
+                logout_button = gr.Button("Logout")
 
         login_button.click(fn=login, inputs=[master_token_input], outputs=[session_token, login_output])
+        logout_button.click(fn=logout_, inputs=[session_token], outputs=[session_token, login_output])
 
         gr.Markdown("## Account Management")
         account_name_input = gr.Textbox(label="Account Name")
@@ -201,20 +212,12 @@ def user_interface():
     return user_ui
 
 
-# Main function to launch the Gradio app
-def main():
+if __name__ == "__main__":
     with gr.Blocks() as app:
         gr.Markdown("# Asset Tracker App")
-        admin_ui = admin_interface()
-        user_ui = user_interface()
-
         with gr.Tab("Admin"):
-            admin_ui.render()
-        with gr.Tab("User"):
-            user_ui.render()
+            admin_interface()
+        # with gr.Tab("User"):
+        #     user_interface()
 
-    app.launch()
-
-
-if __name__ == "__main__":
-    main()
+    app.launch(inbrowser=True)

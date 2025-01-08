@@ -26,13 +26,13 @@ def hash_token(token: str) -> str:
 
 # Admin login function
 def admin_login(master_token: str) -> str:
-    stored_hash = os.getenv('MASTER_TOKEN')
-    if hash_token(master_token) == stored_hash:
+    stored_master_token = os.getenv('MASTER_TOKEN')
+    if master_token == stored_master_token:
         # Generate a unique session token
         session_token = str(uuid.uuid4())
         # Save authentication token to session state
         current_session_tokens['admin'] = session_token
-        logger.info("Admin login successful")
+        logger.info(f"Admin login successful! {current_session_tokens}")
         return session_token
     logger.warning("Admin login failed: invalid master token")
     return ""
@@ -45,7 +45,7 @@ def user_login(login_token: str, db: Session) -> str:
         session_token = str(uuid.uuid4())
         # Save authentication token to session state
         current_session_tokens[user.id] = session_token
-        logger.info(f"User login successful for user: {user.name}")
+        logger.info(f"User login successful for user: {user.name}, {current_session_tokens}")
         return session_token
     logger.warning("User login failed: invalid login token")
     return ""
@@ -55,7 +55,8 @@ def user_login(login_token: str, db: Session) -> str:
 def logout(token: str):
     if token in current_session_tokens.values():
         # Remove authentication token from session state
-        current_session_tokens.pop(token)
+        key = [k for k, v in current_session_tokens.items() if v == token][0]
+        current_session_tokens.pop(key)
         logger.info("Logout successful")
         return True
     logger.warning("Logout failed: invalid session token")
