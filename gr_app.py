@@ -18,7 +18,6 @@ def admin_interface():
             return "", "Login failed"
         return token, "Login successful!"
 
-
     def add_account(token, account_name, start_date):
         db = next(get_db())
         try:
@@ -87,15 +86,15 @@ def admin_interface():
         update_account_button = gr.Button("Update Account")
         account_output = gr.Textbox(label="Account Status")
 
-        add_account_button.click(fn=add_account, 
-                               inputs=[session_token, account_name_input, start_date_input],
-                               outputs=[account_output])
-        delete_account_button.click(fn=remove_account, 
-                                  inputs=[session_token, account_name_input], 
-                                  outputs=[account_output])
-        update_account_button.click(fn=modify_account, 
-                                  inputs=[session_token, account_name_input, start_date_input],
-                                  outputs=[account_output])
+        add_account_button.click(fn=add_account,
+                                 inputs=[session_token, account_name_input, start_date_input],
+                                 outputs=[account_output])
+        delete_account_button.click(fn=remove_account,
+                                    inputs=[session_token, account_name_input],
+                                    outputs=[account_output])
+        update_account_button.click(fn=modify_account,
+                                    inputs=[session_token, account_name_input, start_date_input],
+                                    outputs=[account_output])
 
         gr.Markdown("## User Management")
         user_name_input = gr.Textbox(label="User Name")
@@ -105,81 +104,98 @@ def admin_interface():
         update_user_button = gr.Button("Update User")
         user_output = gr.Textbox(label="User Status")
 
-        add_user_button.click(fn=add_user, 
-                            inputs=[session_token, user_name_input, login_token_input], 
-                            outputs=[user_output])
-        delete_user_button.click(fn=remove_user, 
-                               inputs=[session_token, user_name_input], 
-                               outputs=[user_output])
-        update_user_button.click(fn=modify_user, 
-                               inputs=[session_token, user_name_input, login_token_input], 
-                               outputs=[user_output])
+        add_user_button.click(fn=add_user,
+                              inputs=[session_token, user_name_input, login_token_input],
+                              outputs=[user_output])
+        delete_user_button.click(fn=remove_user,
+                                 inputs=[session_token, user_name_input],
+                                 outputs=[user_output])
+        update_user_button.click(fn=modify_user,
+                                 inputs=[session_token, user_name_input, login_token_input],
+                                 outputs=[user_output])
 
     return admin_ui
 
 
 def user_interface():
+    session_token = gr.State("")  # Initialize empty session token
+
     def login(login_token):
         db = next(get_db())
-        if user_login(login_token, db):
-            return "User login successful!"
-        else:
-            return "User login failed."
+        token = user_login(login_token, db)
+        if not token:
+            return "", "Login failed"
+        return token, "Login successful!"
 
-    def get_balances(user_name):
+    def get_balances(token):
         db = next(get_db())
-        preset_balances = get_preset_balances(user_name, db)
-        realtime_balances = get_realtime_balances(user_name, db)
-        summed_balances = sum_balance_tables(preset_balances + realtime_balances)
+        try:
+            preset_balances = get_preset_balances(token, db)
+            realtime_balances = get_realtime_balances(token, db)
 
-        # Create DataFrames for tables
-        preset_df = pd.DataFrame(preset_balances)
-        realtime_df = pd.DataFrame(realtime_balances)
+            # Create DataFrames for tables
+            preset_df = pd.DataFrame(preset_balances)
+            realtime_df = pd.DataFrame(realtime_balances)
 
-        # Calculate differences and percentage differences
-        realtime_df['Difference'] = realtime_df['realtime_balance'] - preset_df['preset_balance']
-        realtime_df['Percentage Difference'] = (realtime_df['Difference'] / preset_df['preset_balance']) * 100
+            # Calculate differences and percentage differences
+            if not preset_df.empty and not realtime_df.empty:
+                realtime_df['Difference'] = realtime_df['realtime_balance'] - preset_df['preset_balance']
+                realtime_df['Percentage Difference'] = (realtime_df['Difference'] / preset_df['preset_balance']) * 100
 
-        # Prepare table footers
-        preset_footer = f"Total Preset Balance: {summed_balances['total_preset_balance']}"
-        realtime_footer = (f"Total Realtime Balance: {summed_balances['total_realtime_balance']}, "
-                           f"Total Difference: {summed_balances['total_difference']}, "
-                           f"Total Percentage Difference: {summed_balances['total_percentage_difference']}")
+                # Prepare table footers
+                total_preset = preset_df['preset_balance'].sum()
+                total_realtime = realtime_df['realtime_balance'].sum()
+                total_diff = total_realtime - total_preset
+                total_pct_diff = (total_diff / total_preset) * 100 if total_preset != 0 else 0
 
-        return preset_df, preset_footer, realtime_df, realtime_footer
+                preset_footer = f"Total Preset Balance: {total_preset:.2f}"
+                realtime_footer = (f"Total Realtime Balance: {total_realtime:.2f}, "
+                                   f"Total Difference: {total_diff:.2f}, "
+                                   f"Total Percentage Difference: {total_pct_diff:.2f}%")
+            else:
+                preset_footer = "No data available"
+                realtime_footer = "No data available"
 
-    def get_account_details(user_name, page_number=1):
+            return preset_df, preset_footer, realtime_df, realtime_footer
+        except Exception as e:
+            return pd.DataFrame(), f"Error: {str(e)}", pd.DataFrame(), f"Error: {str(e)}"
+
+    def get_account_details(token, page_number=1):
         db = next(get_db())
-        account_history = get_account_balance_history_tables(user_name, db, page_number)
-        history_df = pd.DataFrame(account_history)
-        return history_df
+        try:
+            account_history = get_account_balance_history_tables(token, db, page_number)
+            history_df = pd.DataFrame(account_history)
+            return history_df
+        except Exception as e:
+            return pd.DataFrame(), f"Error: {str(e)}"
 
     with gr.Blocks() as user_ui:
         gr.Markdown("## User Login")
-        login_token_input = gr.Textbox(label="Login Token")
+        login_token_input = gr.Textbox(label="Login Token", type="password")
         login_button = gr.Button("Login")
-        login_output = gr.Textbox(label="Status")
+        login_output = gr.Textbox(label="Status", value="Please login first!")
 
-        login_button.click(fn=login, inputs=[login_token_input], outputs=[login_output])
+        login_button.click(fn=login, inputs=[login_token_input], outputs=[session_token, login_output])
 
         gr.Markdown("## Dashboard")
-        user_name_input = gr.Textbox(label="User Name")
         balance_button = gr.Button("Get Balances")
         preset_balance_table = gr.DataFrame(label="Preset Balance Table")
         preset_balance_footer = gr.Textbox(label="Preset Balance Footer")
         realtime_balance_table = gr.DataFrame(label="Realtime Balance Table")
         realtime_balance_footer = gr.Textbox(label="Realtime Balance Footer")
 
-        balance_button.click(fn=get_balances, inputs=[user_name_input],
+        balance_button.click(fn=get_balances,
+                             inputs=[session_token],
                              outputs=[preset_balance_table, preset_balance_footer,
                                       realtime_balance_table, realtime_balance_footer])
 
         gr.Markdown("## Account Details")
-        page_number_input = gr.Slider(minimum=1, maximum=10, step=1, label="Page Number")
+        page_number_input = gr.Slider(minimum=1, maximum=10, step=1, label="Page Number", value=1)
         account_details_button = gr.Button("Get Account Details")
         account_details_table = gr.DataFrame(label="Account Balance History Table")
 
-        account_details_button.click(fn=get_account_details, inputs=[user_name_input, page_number_input],
+        account_details_button.click(fn=get_account_details,
+                                     inputs=[session_token, page_number_input],
                                      outputs=[account_details_table])
 
     return user_ui

@@ -79,9 +79,6 @@ class AccountBalances(BaseModel):
     name: str
     strategy_balances: list[StrategyBalance]
 
-    def from_strategies(self, name: str, strategies: List[Strategy]) -> 'AccountBalances':
-        ...
-
 
 class PresetAccountBalance(AccountBalances):
     start_date: str

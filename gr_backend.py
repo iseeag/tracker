@@ -134,7 +134,7 @@ def get_realtime_balances(token: str, db: Session) -> Dict[str, RealtimeAccountB
 
 def get_account_balance_history_tables(
         token: str, db: Session, page_number: int = 1, page_size: int = 10
-) -> Dict[str, List]:
+) -> Dict[str, List[StrategyBalanceRecord]]:
     user_id = get_user_id(token)
     accounts, strategies = retrieve_multi_info(user_id, db)
     account_ids = [account.id for account in accounts]
