@@ -1,17 +1,19 @@
 import hashlib
 import os
+import uuid
 from datetime import datetime
 
 import ccxt
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
+from loguru import logger
 from sqlalchemy.orm import Session
 
 from gr_db import (Account, AccountBalanceHistory, SessionLocal, Strategy,
                    User, UserAccountAssociation)
 
-# Load environment variables from .env file
 load_dotenv()
+current_session_tokens = {}
 
 
 # Function to hash tokens
@@ -20,30 +22,41 @@ def hash_token(token: str) -> str:
 
 
 # Admin login function
-def admin_login(master_token: str) -> bool:
-    stored_hash = os.getenv('MASTER_TOKEN_HASH')
+def admin_login(master_token: str) -> str:
+    stored_hash = os.getenv('MASTER_TOKEN')
     if hash_token(master_token) == stored_hash:
+        # Generate a unique session token
+        session_token = str(uuid.uuid4())
         # Save authentication token to session state
-        # Placeholder for session management
-        return True
-    return False
+        current_session_tokens['admin'] = session_token
+        logger.info("Admin login successful")
+        return session_token
+    logger.warning("Admin login failed: invalid master token")
+    return ""
 
 
-# User login function
-def user_login(login_token: str, db: Session) -> bool:
+def user_login(login_token: str, db: Session) -> str:
     user = db.query(User).filter(User.login_token == login_token).first()
     if user:
+        # Generate a unique session token
+        session_token = str(uuid.uuid4())
         # Save authentication token to session state
-        # Placeholder for session management
+        current_session_tokens[user.id] = session_token
+        logger.info(f"User login successful for user ID: {user.id}")
+        return session_token
+    logger.warning("User login failed: invalid login token")
+    return ""
+
+
+# # Logout function
+def logout(token: str):
+    if token in current_session_tokens.values():
+        # Remove authentication token from session state
+        current_session_tokens.pop(token)
+        logger.info("Logout successful")
         return True
+    logger.warning("Logout failed: invalid session token")
     return False
-
-
-# Logout function
-def logout() -> None:
-    # Clear session state
-    # Placeholder for session management
-    pass
 
 
 # Dependency to get DB session
@@ -197,7 +210,7 @@ def update_user(user_id: str, login_token: str, db: Session):
 
 def link_account_to_user(user_id: str, account_id: str, db: Session):
     user_account_link = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id,
-                                                               UserAccountAssociation.account_id == account_id).first()
+                                                                UserAccountAssociation.account_id == account_id).first()
     if not user_account_link:
         new_link = UserAccountAssociation(user_id=user_id, account_id=account_id)
         db.add(new_link)
@@ -208,7 +221,7 @@ def link_account_to_user(user_id: str, account_id: str, db: Session):
 
 def unlink_account_from_user(user_id: str, account_id: str, db: Session):
     user_account_link = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id,
-                                                               UserAccountAssociation.account_id == account_id).first()
+                                                                UserAccountAssociation.account_id == account_id).first()
     if user_account_link:
         db.delete(user_account_link)
         db.commit()

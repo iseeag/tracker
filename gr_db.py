@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import (Column, Date, Float, String, create_engine)
+from sqlalchemy import Column, Date, Float, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -61,6 +61,7 @@ class AccountBalanceHistory(Base):
     __tablename__ = APP_PREFIX + 'account_balance_history'
 
     id = Column(String, primary_key=True, index=True)
+    account_id = Column(String)
     strategy_id = Column(String)
     balance = Column(Float)
     timestamp = Column(Date)
