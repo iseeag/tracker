@@ -1,7 +1,7 @@
 import hashlib
 import os
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List
 
 import ccxt
@@ -143,14 +143,15 @@ def get_account_balance_history_tables(
 # Account and Strategy Management
 
 def create_account(account_name: str, start_date: str, db: Session):
-    new_account = Account(account_name=account_name, start_date=start_date)
+    new_account = Account(account_name=account_name,
+                          start_date=datetime.strptime(start_date, "%m/%d/%Y").date())
     db.add(new_account)
     db.commit()
     return new_account
 
 
-def delete_account(account_id: str, db: Session):
-    account = db.query(Account).filter(Account.id == account_id).first()
+def delete_account(account_name: str, db: Session):
+    account = db.query(Account).filter(Account.account_name == account_name).first()
     if account:
         db.delete(account)
         db.commit()
@@ -158,8 +159,8 @@ def delete_account(account_id: str, db: Session):
     return False
 
 
-def update_account(account_id: str, start_date: str, db: Session):
-    account = db.query(Account).filter(Account.id == account_id).first()
+def update_account(account_name: str, start_date: str, db: Session):
+    account = db.query(Account).filter(Account.id == account_name).first()
     if account:
         account.start_date = start_date
         db.commit()
@@ -227,24 +228,21 @@ def update_user(user_id: str, login_token: str, db: Session):
     return None
 
 
-def link_account_to_user(user_id: str, account_id: str, db: Session):
-    user_account_link = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id,
-                                                                UserAccountAssociation.account_id == account_id).first()
-    if not user_account_link:
+def set_linked_account_to_user(user_name: str, account_ids: List[str], db: Session):
+    user_id = db.query(User).filter(User.name == user_name).first().id
+    user_account_links = db.query(UserAccountAssociation).filter(
+        UserAccountAssociation.user_id == user_id,
+        UserAccountAssociation.account_id.in_(account_ids)).all()
+    linked_account_ids = [link.account_id for link in user_account_links]
+    for account_id in [account for account in account_ids if account not in linked_account_ids]:
         new_link = UserAccountAssociation(user_id=user_id, account_id=account_id)
         db.add(new_link)
-        db.commit()
-        return True
-    return False
-
-
-def unlink_account_from_user(user_id: str, account_id: str, db: Session):
-    user_account_link = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id,
-                                                                UserAccountAssociation.account_id == account_id).first()
-    if user_account_link:
-        db.delete(user_account_link)
-        db.commit()
-        return True
+        logger.info(f"Linked account {account_id} to user {user_name}")
+    for link in user_account_links:
+        if link.account_id not in account_ids:
+            db.delete(link)
+            logger.info(f"Unlinked account {link.account_id} from user {user_name}")
+    db.commit()
     return False
 
 

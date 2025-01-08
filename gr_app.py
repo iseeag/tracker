@@ -6,8 +6,7 @@ from gr_backend import (admin_login, create_account, create_user,
                         get_account_balance_history_tables, get_db,
                         get_preset_balance_tables, get_realtime_balance_tables,
                         link_account_to_user, sum_balance_tables,
-                        unlink_account_from_user, update_account, update_user,
-                        user_login)
+                        update_account, update_user, user_login)
 
 
 # Initialize Gradio interface

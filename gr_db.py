@@ -21,7 +21,7 @@ class Account(Base):
     __tablename__ = APP_PREFIX + 'accounts'
 
     id = Column(String, primary_key=True, index=True)
-    account_name = Column(String)
+    account_name = Column(String, unique=True)
     start_date = Column(Date)
 
 
@@ -44,7 +44,7 @@ class User(Base):
     __tablename__ = APP_PREFIX + 'users'
 
     id = Column(String, primary_key=True, index=True)
-    name = Column(String)
+    name = Column(String, unique=True)
     login_token = Column(String)
 
 
