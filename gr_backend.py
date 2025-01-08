@@ -2,6 +2,7 @@ import hashlib
 import os
 import uuid
 from datetime import datetime
+from typing import Dict, List
 
 import ccxt
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -42,7 +43,7 @@ def user_login(login_token: str, db: Session) -> str:
         session_token = str(uuid.uuid4())
         # Save authentication token to session state
         current_session_tokens[user.id] = session_token
-        logger.info(f"User login successful for user ID: {user.id}")
+        logger.info(f"User login successful for user: {user.name}")
         return session_token
     logger.warning("User login failed: invalid login token")
     return ""
@@ -70,57 +71,64 @@ def get_db():
 
 # User-Type Methods
 
-def get_preset_balance_tables(user_id: str, db: Session):
+def get_preset_balance_tables(user_id: str, db: Session) -> Dict[str, Dict]:
     linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
     account_ids = [link.account_id for link in linked_accounts]
+    accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
     strategies = db.query(Strategy).filter(Strategy.account_id.in_(account_ids)).all()
-    preset_balances = []
-    for strategy in strategies:
-        preset_balances.append({
-            'account_id': strategy.account_id,
-            'strategy_name': strategy.strategy_name,
-            'preset_balance': strategy.preset_balance
-        })
+    preset_balances = {str(a.account_name): {'start_date': a.start_date,
+                                             'strategies': [
+                                                 {
+                                                     'strategy_name': strategy.strategy_name,
+                                                     'preset_balance': strategy.preset_balance
+                                                 } for strategy in strategies if strategy.account_id == a.id]}
+                       for a in accounts}
     return preset_balances
 
 
-def get_realtime_balance_tables(user_id: str, db: Session):
+def get_realtime_balance_tables(user_id: str, db: Session) -> Dict[str, List]:
     linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
     account_ids = [link.account_id for link in linked_accounts]
+    accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
     strategies = db.query(Strategy).filter(Strategy.account_id.in_(account_ids)).all()
-    realtime_balances = []
-    for strategy in strategies:
-        exchange_class = getattr(ccxt, strategy.exchange_type.lower())
-        exchange = exchange_class({
-            'apiKey': strategy.api_key,
-            'secret': strategy.secret_key,
-            'password': strategy.passphrase
-        })
-        balance = exchange.fetch_balance()
-        realtime_balances.append({
-            'account_id': strategy.account_id,
-            'strategy_name': strategy.strategy_name,
-            'realtime_balance': balance['total']
-        })
+    realtime_balances = {}
+    for account in accounts:
+        strategies_bal = []
+        for strategy in [s for s in strategies if s.account_id == account.id]:
+            exchange_class = getattr(ccxt, strategy.exchange_type.lower())
+            exchange = exchange_class({
+                'apiKey': strategy.api_key,
+                'secret': strategy.secret_key,
+                'password': strategy.passphrase
+            })
+            balance = exchange.fetch_balance()
+            strategies_bal.append({'strategy_name': strategy.strategy_name,
+                                   'realtime_balance': balance['total']})
+        realtime_balances[str(account.account_name)] = strategies_bal
     return realtime_balances
 
 
-def get_account_balance_history_tables(user_id: str, db: Session, page_number: int = 1, page_size: int = 10):
+def get_account_balance_history_tables(user_id: str, db: Session, page_number: int = 1, page_size: int = 10
+                                       ) -> Dict[str, Dict]:
     linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
     account_ids = [link.account_id for link in linked_accounts]
+    accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
+    strategies = db.query(Strategy).filter(Strategy.account_id.in_(account_ids)).all()
+    strategies_names = {s.id: s.strategy_name for s in strategies}
     balance_history = db.query(AccountBalanceHistory).filter(
         AccountBalanceHistory.account_id.in_(account_ids)).offset((page_number - 1) * page_size).limit(
         page_size).all()
-    return [{
-        'account_id': record.account_id,
-        'strategy_name': record.strategy_name,
-        'balance': record.balance,
-        'timestamp': record.timestamp
-    } for record in balance_history]
+    account_bal_hist = {}
+    for account in accounts:
+        records = [{
+            'strategy_name': strategies_names[record.strategy_id],
+            'balance': record.balance,
+            'timestamp': record.timestamp
+        } for record in balance_history if record.account_id == account.id]
+        account_bal_hist[account.account_name] = records
 
 
 # Admin-Type Methods
-
 # Account and Strategy Management
 
 def create_account(account_name: str, start_date: str, db: Session):
