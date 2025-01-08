@@ -70,12 +70,24 @@ def get_db():
 
 
 # User-Type Methods
+def get_user_id(session_token: str):
+    for user_id, token in current_session_tokens.items():
+        if token == session_token:
+            return user_id
+    raise Exception("Invalid session token")
 
-def get_preset_balance_tables(user_id: str, db: Session) -> Dict[str, Dict]:
+
+def retrieve_multi_info(user_id: str, db: Session):
     linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
     account_ids = [link.account_id for link in linked_accounts]
     accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
     strategies = db.query(Strategy).filter(Strategy.account_id.in_(account_ids)).all()
+    return accounts, strategies
+
+
+def get_preset_balance_tables(token: str, db: Session) -> Dict[str, Dict]:
+    user_id = get_user_id(token)
+    accounts, strategies = retrieve_multi_info(user_id, db)
     preset_balances = {str(a.account_name): {'start_date': a.start_date,
                                              'strategies': [
                                                  {
@@ -86,11 +98,9 @@ def get_preset_balance_tables(user_id: str, db: Session) -> Dict[str, Dict]:
     return preset_balances
 
 
-def get_realtime_balance_tables(user_id: str, db: Session) -> Dict[str, List]:
-    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
-    account_ids = [link.account_id for link in linked_accounts]
-    accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
-    strategies = db.query(Strategy).filter(Strategy.account_id.in_(account_ids)).all()
+def get_realtime_balance_tables(token: str, db: Session) -> Dict[str, List]:
+    user_id = get_user_id(token)
+    accounts, strategies = retrieve_multi_info(user_id, db)
     realtime_balances = {}
     for account in accounts:
         strategies_bal = []
@@ -108,12 +118,12 @@ def get_realtime_balance_tables(user_id: str, db: Session) -> Dict[str, List]:
     return realtime_balances
 
 
-def get_account_balance_history_tables(user_id: str, db: Session, page_number: int = 1, page_size: int = 10
-                                       ) -> Dict[str, Dict]:
-    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
-    account_ids = [link.account_id for link in linked_accounts]
-    accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
-    strategies = db.query(Strategy).filter(Strategy.account_id.in_(account_ids)).all()
+def get_account_balance_history_tables(
+        token: str, db: Session, page_number: int = 1, page_size: int = 10
+) -> Dict[str, List]:
+    user_id = get_user_id(token)
+    accounts, strategies = retrieve_multi_info(user_id, db)
+    account_ids = [account.id for account in accounts]
     strategies_names = {s.id: s.strategy_name for s in strategies}
     balance_history = db.query(AccountBalanceHistory).filter(
         AccountBalanceHistory.account_id.in_(account_ids)).offset((page_number - 1) * page_size).limit(
@@ -125,7 +135,8 @@ def get_account_balance_history_tables(user_id: str, db: Session, page_number: i
             'balance': record.balance,
             'timestamp': record.timestamp
         } for record in balance_history if record.account_id == account.id]
-        account_bal_hist[account.account_name] = records
+        account_bal_hist[str(account.account_name)] = records
+    return account_bal_hist
 
 
 # Admin-Type Methods
