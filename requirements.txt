@@ -6,3 +6,4 @@ bcrypt
 pandas
 aiohttp
 loguru
+ccxt
