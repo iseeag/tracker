@@ -68,9 +68,11 @@ def admin_interface():
         update_account_button = gr.Button("Update Account")
         account_output = gr.Textbox(label="Account Status")
 
-        add_account_button.click(fn=add_account, inputs=[account_name_input, start_date_input], outputs=[account_output])
+        add_account_button.click(fn=add_account, inputs=[account_name_input, start_date_input],
+                                 outputs=[account_output])
         delete_account_button.click(fn=remove_account, inputs=[account_name_input], outputs=[account_output])
-        update_account_button.click(fn=modify_account, inputs=[account_name_input, start_date_input], outputs=[account_output])
+        update_account_button.click(fn=modify_account, inputs=[account_name_input, start_date_input],
+                                    outputs=[account_output])
 
         gr.Markdown("## User Management")
         user_name_input = gr.Textbox(label="User Name")
@@ -139,8 +141,8 @@ def user_interface():
         realtime_balance_table = gr.DataFrame(label="Realtime Balance Table")
         realtime_balance_footer = gr.Textbox(label="Realtime Balance Footer")
 
-        balance_button.click(fn=get_balances, inputs=[user_name_input], 
-                             outputs=[preset_balance_table, preset_balance_footer, 
+        balance_button.click(fn=get_balances, inputs=[user_name_input],
+                             outputs=[preset_balance_table, preset_balance_footer,
                                       realtime_balance_table, realtime_balance_footer])
 
         gr.Markdown("## Account Details")
@@ -148,9 +150,11 @@ def user_interface():
         account_details_button = gr.Button("Get Account Details")
         account_details_table = gr.DataFrame(label="Account Balance History Table")
 
-        account_details_button.click(fn=get_account_details, inputs=[user_name_input, page_number_input], outputs=[account_details_table])
+        account_details_button.click(fn=get_account_details, inputs=[user_name_input, page_number_input],
+                                     outputs=[account_details_table])
 
     return user_ui
+
 
 # Main function to launch the Gradio app
 def main():
@@ -165,6 +169,7 @@ def main():
             user_ui.render()
 
     app.launch()
+
 
 if __name__ == "__main__":
     main()

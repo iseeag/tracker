@@ -13,9 +13,11 @@ from gr_db import (Account, AccountBalanceHistory, SessionLocal, Strategy,
 # Load environment variables from .env file
 load_dotenv()
 
+
 # Function to hash tokens
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
 
 # Admin login function
 def admin_login(master_token: str) -> bool:
@@ -26,6 +28,7 @@ def admin_login(master_token: str) -> bool:
         return True
     return False
 
+
 # User login function
 def user_login(login_token: str, db: Session) -> bool:
     user = db.query(User).filter(User.login_token == login_token).first()
@@ -35,11 +38,13 @@ def user_login(login_token: str, db: Session) -> bool:
         return True
     return False
 
+
 # Logout function
 def logout() -> None:
     # Clear session state
     # Placeholder for session management
     pass
+
 
 # Dependency to get DB session
 def get_db():
@@ -48,6 +53,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 # User-Type Methods
 
@@ -90,7 +96,9 @@ def get_account_balance_history_tables(user_name: str, db: Session, page_number:
     linked_accounts = db.query(user_accounts).filter(user_accounts.c.user_name == user_name).all()
     balance_history = []
     for account in linked_accounts:
-        history = db.query(AccountBalanceHistory).filter(AccountBalanceHistory.account_name == account.account_name).offset((page_number - 1) * page_size).limit(page_size).all()
+        history = db.query(AccountBalanceHistory).filter(
+            AccountBalanceHistory.account_name == account.account_name).offset((page_number - 1) * page_size).limit(
+            page_size).all()
         for record in history:
             balance_history.append({
                 'account_name': record.account_name,
@@ -99,6 +107,7 @@ def get_account_balance_history_tables(user_name: str, db: Session, page_number:
                 'timestamp': record.timestamp
             })
     return balance_history
+
 
 # Admin-Type Methods
 
@@ -129,8 +138,11 @@ def update_account(account_name: str, start_date: str, db: Session):
     return None
 
 
-def create_strategy(account_name: str, strategy_name: str, api_key: str, secret_key: str, passphrase: str, exchange_type: str, preset_balance: float, db: Session):
-    new_strategy = Strategy(account_name=account_name, strategy_name=strategy_name, api_key=api_key, secret_key=secret_key, passphrase=passphrase, exchange_type=exchange_type, preset_balance=preset_balance)
+def create_strategy(account_name: str, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
+                    exchange_type: str, preset_balance: float, db: Session):
+    new_strategy = Strategy(account_name=account_name, strategy_name=strategy_name, api_key=api_key,
+                            secret_key=secret_key, passphrase=passphrase, exchange_type=exchange_type,
+                            preset_balance=preset_balance)
     db.add(new_strategy)
     db.commit()
     return new_strategy
@@ -145,7 +157,8 @@ def delete_strategy(strategy_name: str, db: Session):
     return False
 
 
-def update_strategy(strategy_name: str, api_key: str, secret_key: str, passphrase: str, exchange_type: str, preset_balance: float, db: Session):
+def update_strategy(strategy_name: str, api_key: str, secret_key: str, passphrase: str, exchange_type: str,
+                    preset_balance: float, db: Session):
     strategy = db.query(Strategy).filter(Strategy.strategy_name == strategy_name).first()
     if strategy:
         strategy.api_key = api_key
@@ -156,6 +169,7 @@ def update_strategy(strategy_name: str, api_key: str, secret_key: str, passphras
         db.commit()
         return strategy
     return None
+
 
 # User Management
 
@@ -185,7 +199,8 @@ def update_user(name: str, login_token: str, db: Session):
 
 
 def link_account_to_user(user_name: str, account_name: str, db: Session):
-    user_account_link = db.query(user_accounts).filter(user_accounts.c.user_name == user_name, user_accounts.c.account_name == account_name).first()
+    user_account_link = db.query(user_accounts).filter(user_accounts.c.user_name == user_name,
+                                                       user_accounts.c.account_name == account_name).first()
     if not user_account_link:
         db.execute(user_accounts.insert().values(user_name=user_name, account_name=account_name))
         db.commit()
@@ -194,12 +209,15 @@ def link_account_to_user(user_name: str, account_name: str, db: Session):
 
 
 def unlink_account_from_user(user_name: str, account_name: str, db: Session):
-    user_account_link = db.query(user_accounts).filter(user_accounts.c.user_name == user_name, user_accounts.c.account_name == account_name).first()
+    user_account_link = db.query(user_accounts).filter(user_accounts.c.user_name == user_name,
+                                                       user_accounts.c.account_name == account_name).first()
     if user_account_link:
-        db.execute(user_accounts.delete().where(user_accounts.c.user_name == user_name, user_accounts.c.account_name == account_name))
+        db.execute(user_accounts.delete().where(user_accounts.c.user_name == user_name,
+                                                user_accounts.c.account_name == account_name))
         db.commit()
         return True
     return False
+
 
 # Backend Utility Methods
 
@@ -227,6 +245,7 @@ def sum_balance_tables(balances: list):
         'total_difference': total_difference,
         'total_percentage_difference': total_percentage_difference
     }
+
 
 # Scheduled Tasks with APScheduler
 

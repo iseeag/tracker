@@ -15,6 +15,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+
 # Accounts Table
 class Account(Base):
     __tablename__ = 'accounts'
@@ -24,6 +25,7 @@ class Account(Base):
 
     strategies = relationship('Strategy', back_populates='account')
     users = relationship('User', secondary='user_accounts', back_populates='accounts')
+
 
 # Strategies Table
 class Strategy(Base):
@@ -40,6 +42,7 @@ class Strategy(Base):
 
     account = relationship('Account', back_populates='strategies')
 
+
 # Users Table
 class User(Base):
     __tablename__ = 'users'
@@ -49,12 +52,14 @@ class User(Base):
 
     accounts = relationship('Account', secondary='user_accounts', back_populates='users')
 
+
 # User_Accounts Association Table
 user_accounts = Table(
     'user_accounts', Base.metadata,
     Column('user_name', String, ForeignKey('users.name')),
     Column('account_name', String, ForeignKey('accounts.account_name'))
 )
+
 
 # Account_Balance_History Table
 class AccountBalanceHistory(Base):
@@ -65,6 +70,7 @@ class AccountBalanceHistory(Base):
     strategy_name = Column(String)
     balance = Column(Float)
     timestamp = Column(Date)
+
 
 # Create tables
 Base.metadata.create_all(bind=engine)
