@@ -204,6 +204,12 @@ def update_account(token: str, account_name: str, start_date: str, db: Session):
     return None
 
 
+def list_accounts(token: str, db: Session):
+    check_admin_token(token)
+    accounts = db.query(Account).all()
+    return accounts
+
+
 def create_strategy(token: str, account_id: str, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
                     exchange_type: str, preset_balance: float, db: Session):
     check_admin_token(token)
