@@ -176,6 +176,7 @@ def create_account(token: str, account_name: str, start_date: str, db: Session):
     db.add(new_account)
     db.commit()
     db.refresh(new_account)  # Refresh to get the auto-generated ID
+    logger.info(f"Created account {account_name}")
     return new_account
 
 
@@ -199,12 +200,20 @@ def delete_account(token: str, account_name: str, db: Session):
 
 def update_account(token: str, account_name: str, start_date: str, db: Session):
     check_admin_token(token)
-    account = db.query(Account).filter(Account.id == account_name).first()
+    account = db.query(Account).filter(Account.account_name == account_name).first()
     if account:
-        account.start_date = start_date
+        account.start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
         db.commit()
+        logger.info(f"Updated account {account_name}")
         return account
+    logger.warning(f"Account {account_name} not found, update failed")
     return None
+
+
+def get_account(token: str, account_name: str, db: Session):
+    check_admin_token(token)
+    account = db.query(Account).filter(Account.account_name == account_name).first()
+    return account
 
 
 def list_accounts(token: str, db: Session):
@@ -213,7 +222,7 @@ def list_accounts(token: str, db: Session):
     return accounts
 
 
-def create_strategy(token: str, account_id: str, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
+def create_strategy(token: str, account_id: int, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
                     exchange_type: str, preset_balance: float, db: Session):
     check_admin_token(token)
     new_strategy = Strategy(
@@ -227,6 +236,8 @@ def create_strategy(token: str, account_id: str, strategy_name: str, api_key: st
     )
     db.add(new_strategy)
     db.commit()
+    db.refresh(new_strategy)
+    logger.info(f"Created strategy {strategy_name}")
     return new_strategy
 
 
@@ -236,7 +247,9 @@ def delete_strategy(token: str, strategy_id: str, db: Session):
     if strategy:
         db.delete(strategy)
         db.commit()
+        logger.info(f"Deleted strategy {strategy_id}")
         return True
+    logger.warning(f"Strategy {strategy_id} not found, deletion failed")
     return False
 
 
@@ -279,6 +292,7 @@ def delete_user(token: str, user_id: str, db: Session):
         db.commit()
         logger.info(f"Deleted user {user_id} and its associations")
         return True
+    logger.warning(f"User {user_id} not found, deletion failed")
     return False
 
 
@@ -288,11 +302,13 @@ def update_user(token: str, user_id: str, login_token: str, db: Session):
     if user:
         user.login_token = login_token
         db.commit()
+        logger.info(f"Updated user {user_id}")
         return user
+    logger.warning(f"User {user_id} not found, update failed")
     return None
 
 
-def set_linked_account_to_user(token: str, user_name: str, account_ids: List[str], db: Session):
+def set_linked_account_to_user(token: str, user_name: str, account_ids: List[int], db: Session):
     check_admin_token(token)
     # First, get the user
     user = db.query(User).filter(User.name == user_name).first()
@@ -307,9 +323,10 @@ def set_linked_account_to_user(token: str, user_name: str, account_ids: List[str
 
     # Create new links
     for account_id in account_ids:
-        new_link = UserAccountAssociation(user_id=user.id, account_id=account_id)
+        new_link = UserAccountAssociation(user_id=int(user.id), account_id=int(account_id))
         db.add(new_link)
 
+    logger.info(f"Linked accounts {account_ids} to user {user_name}")
     db.commit()
     return True
 
@@ -355,8 +372,8 @@ def daily_balance_snapshot(db: Session):
         for strategy in strategies:
             strategy_balance = retrieve_strategy_balance(strategy)
             new_record = AccountBalanceHistory(
-                account_id=str(account.id),
-                strategy_id=str(strategy.id),
+                account_id=int(account.id),
+                strategy_id=int(strategy.id),
                 balance=strategy_balance,
                 timestamp=datetime.now()
             )

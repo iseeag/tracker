@@ -8,7 +8,7 @@ from gr_backend import (admin_login, create_account, create_user,
                         delete_account, delete_user,
                         get_account_balance_history_tables, get_db,
                         get_preset_balances, get_realtime_balances,
-                        list_accounts)
+                        list_accounts, get_account)
 from gr_backend import logout as user_logout_backend
 from gr_backend import update_account, update_user
 from gr_backend import user_login as user_login_backend
@@ -37,23 +37,20 @@ def logout(token) -> Tuple[str, str]:
 
 def add_account(token, account_name, start_date: float):
     db = next(get_db())
+    start_date = (datetime.fromtimestamp(start_date)).strftime("%Y-%m-%d")
     try:
-        start_date = (datetime.fromtimestamp(start_date)).strftime("%Y-%m-%d")
         create_account(token, account_name, start_date, db)
         return "Account added successfully!"
     except Exception as e:
         return f"Failed to add account: {str(e)}"
 
 
-# ######### ui ###########
-def toggle_panels_x3(token):
-    visible = True if token else True  # todo: fix this
-    return [gr.Group(visible=visible) for _ in range(3)]
-
-
-def toggle_panels_x2(token):
-    visible = True if token else True  # todo: fix this
-    return [gr.Group(visible=visible) for _ in range(2)]
+def modify_account(token, account_name, start_date):
+    db = next(get_db())
+    start_date = (datetime.fromtimestamp(start_date)).strftime("%Y-%m-%d")
+    if update_account(token, account_name, start_date, db):
+        return "Account updated successfully!"
+    return "Account update failed."
 
 
 def remove_account(token, account_name):
@@ -66,21 +63,34 @@ def remove_account(token, account_name):
         return f"Failed to delete account: {str(e)}"
 
 
-def get_accounts(token) -> List[str]:
+def update_selectable_accounts(token) -> gr.Dropdown:
+    if not token:
+        return gr.Dropdown(choices=[])
     db = next(get_db())
     accounts = list_accounts(token, db)
-    account_names = [account['name'] for account in accounts]
-    return account_names
+    account_names = [account.account_name for account in accounts]
+    return gr.Dropdown(choices=account_names)
 
 
-def modify_account(token, account_name, start_date):
+# ######### ui react ###########
+def toggle_panels_x3(token):
+    visible = True if token else True  # todo: fix this
+    return [gr.Group(visible=visible) for _ in range(3)]
+
+
+def toggle_panels_x2(token):
+    visible = True if token else True  # todo: fix this
+    return [gr.Group(visible=visible) for _ in range(2)]
+
+
+def clear_account_panel():
+    return gr.Dropdown(value=''), gr.Textbox(value=''), gr.DateTime(value=None)
+
+
+def fill_account(token, account_name):
     db = next(get_db())
-    try:
-        if update_account(token, account_name, start_date, db):
-            return "Account updated successfully!"
-        return "Account update failed."
-    except Exception as e:
-        return f"Failed to update account: {str(e)}"
+    account = get_account(token, account_name, db)
+    return gr.Textbox(value=account.account_name), gr.DateTime(value=account.start_date.strftime("%Y-%m-%d"))
 
 
 def add_user(token, name, login_token):
@@ -174,7 +184,7 @@ def admin_interface():
         gr.Markdown("## Account Management")
         with gr.Group(visible=False) as account_panel:
             with gr.Row():
-                existing_accounts = gr.Dropdown(label="Select Accounts", choices=[])
+                selected_account = gr.Dropdown(label="Select Accounts", choices=[], interactive=True)
                 account_name_input = gr.Textbox(label="Account Name")
                 start_date_input = gr.DateTime(label="Start Date", include_time=False)
                 # list accounts with drop down when clicked show strategies and update and delete buttons
@@ -219,19 +229,24 @@ def admin_interface():
 
             gr.CheckboxGroup(label="Select Accounts", choices=[])
 
-        login_button.click(fn=master_login, inputs=[master_token_input], outputs=[session_token, action_status])
+        login_action = login_button.click(
+            fn=master_login, inputs=[master_token_input], outputs=[session_token, action_status])
         logout_button.click(fn=logout, inputs=[session_token], outputs=[session_token, action_status])
-        session_token.change(fn=toggle_panels_x3, inputs=[session_token],
-                             outputs=[account_panel, strategy_panel, user_panel])
-        add_account_button.click(fn=add_account,
-                                 inputs=[session_token, account_name_input, start_date_input],
-                                 outputs=[action_status])
-        delete_account_button.click(fn=remove_account,
-                                    inputs=[session_token, account_name_input],
-                                    outputs=[action_status])
-        update_account_button.click(fn=modify_account,
-                                    inputs=[session_token, account_name_input, start_date_input],
-                                    outputs=[action_status])
+        session_token.change(
+            fn=toggle_panels_x3, inputs=[session_token], outputs=[account_panel, strategy_panel, user_panel])
+        add_acc_action = add_account_button.click(
+            fn=add_account, inputs=[session_token, account_name_input, start_date_input], outputs=[action_status])
+        delete_acc_action = delete_account_button.click(
+            fn=remove_account, inputs=[session_token, selected_account], outputs=[action_status])
+        update_account_button.click(
+            fn=modify_account, inputs=[session_token, account_name_input, start_date_input], outputs=[action_status])
+        for a in [login_action, add_acc_action, delete_acc_action]:
+            a.then(update_selectable_accounts, inputs=[session_token], outputs=[selected_account])
+        for a in [add_acc_action, delete_acc_action]:
+            a.then(clear_account_panel, outputs=[selected_account, account_name_input, start_date_input])
+        selected_account.select(
+            fill_account, inputs=[session_token, selected_account], outputs=[account_name_input, start_date_input])
+
         add_user_button.click(fn=add_user,
                               inputs=[session_token, user_name_input, login_token_input],
                               outputs=[action_status])
