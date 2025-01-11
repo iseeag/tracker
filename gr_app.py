@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Tuple
 
 import gradio as gr
@@ -34,24 +35,25 @@ def logout(token) -> Tuple[str, str]:
     return "", "Logout failed"
 
 
-# ######### ui ###########
-def toggle_panels_x3(session_token):
-    visible = True if session_token else False
-    return [gr.Group(visible=visible) for _ in range(3)]
-
-
-def toggle_panels_x2(session_token):
-    visible = True if session_token else False
-    return [gr.Group(visible=visible) for _ in range(2)]
-
-
-def add_account(token, account_name, start_date):
+def add_account(token, account_name, start_date: float):
     db = next(get_db())
     try:
+        start_date = (datetime.fromtimestamp(start_date)).strftime("%Y-%m-%d")
         create_account(token, account_name, start_date, db)
         return "Account added successfully!"
     except Exception as e:
         return f"Failed to add account: {str(e)}"
+
+
+# ######### ui ###########
+def toggle_panels_x3(token):
+    visible = True if token else True  # todo: fix this
+    return [gr.Group(visible=visible) for _ in range(3)]
+
+
+def toggle_panels_x2(token):
+    visible = True if token else True  # todo: fix this
+    return [gr.Group(visible=visible) for _ in range(2)]
 
 
 def remove_account(token, account_name):
@@ -163,7 +165,8 @@ def admin_interface():
         gr.Markdown("## Login")
         with gr.Group():
             with gr.Row():
-                master_token_input = gr.Textbox(label="Master Token", type="password", scale=3)
+                master_token_input = gr.Textbox(label="Master Token", type="password", scale=3,
+                                                value='20add5567250ccff972607fc1e516047')
                 with gr.Column():
                     login_button = gr.Button("Login")
                     logout_button = gr.Button("Logout")
@@ -173,7 +176,7 @@ def admin_interface():
             with gr.Row():
                 existing_accounts = gr.Dropdown(label="Select Accounts", choices=[])
                 account_name_input = gr.Textbox(label="Account Name")
-                start_date_input = gr.DateTime(label="Start Date")
+                start_date_input = gr.DateTime(label="Start Date", include_time=False)
                 # list accounts with drop down when clicked show strategies and update and delete buttons
                 with gr.Column():
                     with gr.Row():
@@ -316,9 +319,9 @@ def user_interface():
 if __name__ == "__main__":
     with gr.Blocks() as app:
         gr.Markdown("# Asset Tracker App")
-        with gr.Tab("User"):
-            user_interface()
         with gr.Tab("Admin"):
             admin_interface()
+        with gr.Tab("User"):
+            user_interface()
 
     app.launch(inbrowser=True)
