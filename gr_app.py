@@ -7,21 +7,42 @@ from gr_backend import (admin_login, create_account, create_user,
                         delete_account, delete_user,
                         get_account_balance_history_tables, get_db,
                         get_preset_balances, get_realtime_balances,
-                        list_accounts, logout, update_account, update_user,
-                        user_login)
+                        list_accounts)
+from gr_backend import logout as user_logout_backend
+from gr_backend import update_account, update_user
+from gr_backend import user_login as user_login_backend
 
 
-def login(master_token) -> Tuple[str, str]:
+# ######### backends ###########
+def master_login(master_token) -> Tuple[str, str]:
     token = admin_login(master_token)
     if not token:
         return "", "Login failed"
     return token, "Login successful!"
 
 
-def logout_(token) -> Tuple[str, str]:
-    if logout(token):
+def user_login(token: str) -> Tuple[str, str]:
+    token = user_login_backend(token, next(get_db()))
+    if not token:
+        return "", "Login failed"
+    return token, "Login successful!"
+
+
+def logout(token) -> Tuple[str, str]:
+    if user_logout_backend(token):
         return "", "Logout successful!"
     return "", "Logout failed"
+
+
+# ######### ui ###########
+def toggle_panels_x3(session_token):
+    visible = True if session_token else False
+    return [gr.Group(visible=visible) for _ in range(3)]
+
+
+def toggle_panels_x2(session_token):
+    visible = True if session_token else False
+    return [gr.Group(visible=visible) for _ in range(2)]
 
 
 def add_account(token, account_name, start_date):
@@ -88,13 +109,6 @@ def modify_user(token, name, login_token):
     except Exception as e:
         return f"Failed to update user: {str(e)}"
 
-    def login(login_token):
-        db = next(get_db())
-        token = user_login(login_token, db)
-        if not token:
-            return "", "Login failed"
-        return token, "Login successful!"
-
     def get_balances(token):
         db = next(get_db())
         try:
@@ -154,11 +168,8 @@ def admin_interface():
                     login_button = gr.Button("Login")
                     logout_button = gr.Button("Logout")
 
-        login_button.click(fn=login, inputs=[master_token_input], outputs=[session_token, action_status])
-        logout_button.click(fn=logout_, inputs=[session_token], outputs=[session_token, action_status])
-
         gr.Markdown("## Account Management")
-        with gr.Group():
+        with gr.Group(visible=False) as account_panel:
             with gr.Row():
                 existing_accounts = gr.Dropdown(label="Select Accounts", choices=[])
                 account_name_input = gr.Textbox(label="Account Name")
@@ -172,7 +183,7 @@ def admin_interface():
                         update_account_button = gr.Button("Update")
 
         gr.Markdown("### Strategy Management")
-        with gr.Group():
+        with gr.Group(visible=False) as strategy_panel:
             with gr.Row():
                 with gr.Column(scale=3):
                     with gr.Row():
@@ -190,21 +201,8 @@ def admin_interface():
                     update_strategy_button = gr.Button("Update")
                     validate_strategy_button = gr.Button("Validate")
 
-        # for adding strategy, list non-existing types with drop down for add
-        # show existing ones with update and delete buttons
-
-        add_account_button.click(fn=add_account,
-                                 inputs=[session_token, account_name_input, start_date_input],
-                                 outputs=[action_status])
-        delete_account_button.click(fn=remove_account,
-                                    inputs=[session_token, account_name_input],
-                                    outputs=[action_status])
-        update_account_button.click(fn=modify_account,
-                                    inputs=[session_token, account_name_input, start_date_input],
-                                    outputs=[action_status])
-
         gr.Markdown("## User Management")
-        with gr.Group():
+        with gr.Group(visible=False) as user_panel:
             with gr.Row():
                 select_user = gr.Dropdown(label="Select User", choices=[])
                 user_name_input = gr.Textbox(label="User Name")
@@ -216,10 +214,21 @@ def admin_interface():
                     with gr.Row():
                         update_user_button = gr.Button("Update")
 
-            @gr.render()
-            def show_account_link_checkbox():
-                gr.CheckboxGroup(label="Select Accounts", choices=[])
+            gr.CheckboxGroup(label="Select Accounts", choices=[])
 
+        login_button.click(fn=master_login, inputs=[master_token_input], outputs=[session_token, action_status])
+        logout_button.click(fn=logout, inputs=[session_token], outputs=[session_token, action_status])
+        session_token.change(fn=toggle_panels_x3, inputs=[session_token],
+                             outputs=[account_panel, strategy_panel, user_panel])
+        add_account_button.click(fn=add_account,
+                                 inputs=[session_token, account_name_input, start_date_input],
+                                 outputs=[action_status])
+        delete_account_button.click(fn=remove_account,
+                                    inputs=[session_token, account_name_input],
+                                    outputs=[action_status])
+        update_account_button.click(fn=modify_account,
+                                    inputs=[session_token, account_name_input, start_date_input],
+                                    outputs=[action_status])
         add_user_button.click(fn=add_user,
                               inputs=[session_token, user_name_input, login_token_input],
                               outputs=[action_status])
@@ -248,10 +257,8 @@ def user_interface():
                     login_button = gr.Button("Login")
                     logout_button = gr.Button("Logout")
 
-        login_button.click(fn=login, inputs=[login_token_input], outputs=[session_token, action_status])
-
         gr.Markdown("## Summarized Account Balance")
-        with gr.Row():
+        with gr.Row(visible=False) as account_balance_panel:
             preset_balance_table = gr.DataFrame(
                 scale=2,
                 label="Total Initial Balance",
@@ -268,34 +275,40 @@ def user_interface():
         preset_tables = []
         realtime_tables = []
         history_tables = []
-        for i in range(3):
-            with gr.Accordion(label=f"A Account", open=False):
-                with gr.Row():
-                    preset_balance_table = gr.DataFrame(
-                        scale=2,
-                        label="Total Initial Balance",
-                        value=pd.DataFrame([['alksdjfl', 9384093, ], ['slkdjfs', 33948]],
-                                           columns=["Account Name", "Preset Balance"]))
-                    realtime_balance_table = gr.DataFrame(
+        with gr.Group(visible=False) as account_details_panel:
+            for i in range(3):
+                with gr.Accordion(label=f"A Account", open=False):
+                    with gr.Row():
+                        preset_balance_table = gr.DataFrame(
+                            scale=2,
+                            label="Total Initial Balance",
+                            value=pd.DataFrame([['alksdjfl', 9384093, ], ['slkdjfs', 33948]],
+                                               columns=["Account Name", "Preset Balance"]))
+                        realtime_balance_table = gr.DataFrame(
+                            scale=4,
+                            label="Total Realtime Balance",
+                            value=pd.DataFrame([['alksdjfl', 9384093, 39, 30], ['slkdjfs', 33948, 30, 89],
+                                                ['3lksdj', 230983, 39, 30], ['Total', 20390, 30, 30]],
+                                               columns=["Account Name", "Realtime Balance", "Difference",
+                                                        "Percentage Difference"]))
+                        preset_tables.append(preset_balance_table)
+                        realtime_tables.append(realtime_balance_table)
+                    history_table = gr.DataFrame(
                         scale=4,
-                        label="Total Realtime Balance",
-                        value=pd.DataFrame([['alksdjfl', 9384093, 39, 30], ['slkdjfs', 33948, 30, 89],
-                                            ['3lksdj', 230983, 39, 30], ['Total', 20390, 30, 30]],
-                                           columns=["Account Name", "Realtime Balance", "Difference",
-                                                    "Percentage Difference"]))
-                    preset_tables.append(preset_balance_table)
-                    realtime_tables.append(realtime_balance_table)
-                history_table = gr.DataFrame(
-                    scale=4,
-                    label="Account Balance History",
-                    value=pd.DataFrame(
-                        [["2021-01-01", 9384093, 9384093, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-                        columns=["Date", "S1", "S2", "S3", "Total", "Diff1", "Diff2", "Diff3", "Total Diff",
-                                 "Pct Diff1", "Pct Diff2", "Pct Diff3", "Total Pct Diff"]))
-                history_tables.append(history_table)
-                with gr.Row():
-                    previous_page_button = gr.Button("Previous Page")
-                    next_page_button = gr.Button("Next Page")
+                        label="Account Balance History",
+                        value=pd.DataFrame(
+                            [["2021-01-01", 9384093, 9384093, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+                            columns=["Date", "S1", "S2", "S3", "Total", "Diff1", "Diff2", "Diff3", "Total Diff",
+                                     "Pct Diff1", "Pct Diff2", "Pct Diff3", "Total Pct Diff"]))
+                    history_tables.append(history_table)
+                    with gr.Row():
+                        previous_page_button = gr.Button("Previous Page")
+                        next_page_button = gr.Button("Next Page")
+
+    login_button.click(fn=user_login, inputs=[login_token_input], outputs=[session_token, action_status])
+    logout_button.click(fn=logout, inputs=[session_token], outputs=[session_token, action_status])
+    session_token.change(fn=toggle_panels_x2, inputs=[session_token],
+                         outputs=[account_balance_panel, account_details_panel])
 
     return user_ui
 
