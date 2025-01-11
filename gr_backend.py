@@ -169,10 +169,13 @@ def check_admin_token(token: str) -> bool:
 
 def create_account(token: str, account_name: str, start_date: str, db: Session):
     check_admin_token(token)
-    new_account = Account(account_name=account_name,
-                          start_date=datetime.strptime(start_date, "%Y-%m-%d").date())
+    new_account = Account(
+        account_name=account_name,
+        start_date=datetime.strptime(start_date, "%Y-%m-%d").date()
+    )
     db.add(new_account)
     db.commit()
+    db.refresh(new_account)  # Refresh to get the auto-generated ID
     return new_account
 
 

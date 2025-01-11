@@ -4,7 +4,7 @@ from typing import List
 import pandas as pd
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from sqlalchemy import Column, Date, Float, String, create_engine
+from sqlalchemy import Column, Date, Float, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -23,7 +23,7 @@ Base = declarative_base()
 class Account(Base):
     __tablename__ = APP_PREFIX + 'accounts'
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     account_name = Column(String, unique=True)
     start_date = Column(Date)
 
@@ -32,8 +32,8 @@ class Account(Base):
 class Strategy(Base):
     __tablename__ = APP_PREFIX + 'strategies'
 
-    id = Column(String, primary_key=True, index=True)
-    account_id = Column(String)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    account_id = Column(Integer)
     strategy_name = Column(String)
     api_key = Column(String)
     secret_key = Column(String)
@@ -46,7 +46,7 @@ class Strategy(Base):
 class User(Base):
     __tablename__ = APP_PREFIX + 'users'
 
-    id = Column(String, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, unique=True)
     login_token = Column(String)
 
@@ -54,18 +54,18 @@ class User(Base):
 class UserAccountAssociation(Base):
     __tablename__ = APP_PREFIX + 'user_accounts_association'
 
-    id = Column(String, primary_key=True, index=True)
-    user_id = Column(String)
-    account_id = Column(String)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer)
+    account_id = Column(Integer)
 
 
 # Account_Balance_History Table
 class AccountBalanceHistory(Base):
     __tablename__ = APP_PREFIX + 'account_balance_history'
 
-    id = Column(String, primary_key=True, index=True)
-    account_id = Column(String)
-    strategy_id = Column(String)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    account_id = Column(Integer)
+    strategy_id = Column(Integer)
     balance = Column(Float)
     timestamp = Column(Date)
 
