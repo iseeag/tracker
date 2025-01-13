@@ -4,17 +4,25 @@ from typing import List, Tuple
 import gradio as gr
 import pandas as pd
 
-from gr_backend import (admin_login, create_account, create_user,
-                        delete_account, delete_user, validate_exchange_credentials,
-                        get_account_balance_history_tables, get_db,
-                        get_preset_balances, get_realtime_balances,
-                        list_accounts, get_account, create_strategy)
-from gr_backend import logout as user_logout_backend
-from gr_backend import update_account, update_user
-from gr_backend import user_login as user_login_backend
-from gr_backend import get_strategy as get_strategy_backend
-from gr_backend import update_strategy as update_strategy_backend
+from gr_backend import admin_login, create_account, create_strategy
+from gr_backend import create_user as create_user_backend
+from gr_backend import delete_account as delete_account_backend
 from gr_backend import delete_strategy as delete_strategy_backend
+from gr_backend import delete_user as delete_user_backend
+from gr_backend import get_account as get_account_backend
+from gr_backend import (get_account_balance_history_tables, get_db,
+                        get_preset_balances, get_realtime_balances)
+from gr_backend import get_strategy as get_strategy_backend
+from gr_backend import get_user as get_user_backend
+from gr_backend import list_accounts as list_accounts_backend
+from gr_backend import list_users as list_users_backend
+from gr_backend import logout as user_logout_backend
+from gr_backend import update_account
+from gr_backend import update_strategy as update_strategy_backend
+from gr_backend import update_user as update_user_backend
+from gr_backend import user_login as user_login_backend
+from gr_backend import validate_exchange_credentials
+from gr_backend import set_user_linked_account, get_user_linked_accounts
 
 
 def null_check(*args):
@@ -63,11 +71,11 @@ def modify_account(token, account_name, start_date):
     return "Account update failed."
 
 
-def remove_account(token, account_name):
+def delete_account(token, account_name):
     null_check(account_name)
     db = next(get_db())
     try:
-        if delete_account(token, account_name, db):
+        if delete_account_backend(token, account_name, db):
             return "Account deleted successfully!"
         return "Account deletion failed."
     except Exception as e:
@@ -78,7 +86,7 @@ def update_selectable_accounts(token) -> gr.Dropdown:
     if not token:
         return gr.Dropdown(choices=[])
     db = next(get_db())
-    accounts = list_accounts(token, db)
+    accounts = list_accounts_backend(token, db)
     account_names = [account.account_name for account in accounts]
     return gr.Dropdown(choices=account_names)
 
@@ -139,6 +147,36 @@ def validate_strategy(api_key, secret_key, passphrase, exchange_type):
     return "Credentials are invalid!"
 
 
+def add_user(token, name, login_token, linked_accounts):
+    null_check(name, login_token)
+    db = next(get_db())
+    if create_user_backend(token, name, login_token, linked_accounts, db):
+        return "User added successfully!"
+    return f"Failed to add user!"
+
+
+def update_selectable_users(token) -> gr.Dropdown:
+    db = next(get_db())
+    users = list_users_backend(token, db)
+    return gr.Dropdown(choices=[user.name for user in users])
+
+
+def remove_user(token, name):
+    null_check(name)
+    db = next(get_db())
+    if delete_user_backend(token, name, db):
+        return "User deleted successfully!"
+    return "User deletion failed."
+
+
+def update_user(token, name, login_token, linked_accounts):
+    null_check(name, login_token)
+    db = next(get_db())
+    if update_user_backend(token, name, login_token, linked_accounts, db):
+        return "User updated successfully!"
+    return "User update failed."
+
+
 # ######### ui react ###########
 def toggle_panels_x3(token):
     visible = True if token else True  # todo: fix this
@@ -150,85 +188,86 @@ def toggle_panels_x2(token):
     return [gr.Group(visible=visible) for _ in range(2)]
 
 
-def clear_account_panel():
+def clear_account_fields():
     return gr.Dropdown(value=''), gr.Textbox(value=''), gr.DateTime(value=None)
 
 
-def fill_account(token, account_name):
+def fill_account_fields(token, account_name):
     db = next(get_db())
-    account = get_account(token, account_name, db)
+    account = get_account_backend(token, account_name, db)
     return gr.Textbox(value=account.account_name), gr.DateTime(value=account.start_date.strftime("%Y-%m-%d"))
 
 
-def add_user(token, name, login_token):
+def clear_user_fields():
+    return gr.Dropdown(value=''), gr.Textbox(value=''), gr.Textbox(value='')
+
+
+def fill_user_fields(token, user_name):
+    db = next(get_db())
+    user = get_user_backend(token, user_name, db)
+    linked_accounts = get_user_linked_accounts(user.name, db)
+    linked_accounts = [str(a.account_name) for a in linked_accounts]
+    return gr.Textbox(value=user.name), gr.Textbox(value=user.login_token), gr.CheckboxGroup(value=linked_accounts)
+
+
+def fill_linked_accounts(token, user_name):
+    db = next(get_db())
+    accounts = list_accounts_backend(token, db)
+    account_names = [account.account_name for account in accounts]
+    linked_accounts = []
+    if user_name:
+        user = get_user_backend(token, user_name, db)
+        if user:
+            linked_accounts = get_user_linked_accounts(user.name, db)
+    linked_accounts = [str(a.account_name) for a in linked_accounts]
+    return gr.CheckboxGroup(choices=account_names, value=linked_accounts)
+
+
+# -----------
+
+
+def get_balances(token):
     db = next(get_db())
     try:
-        create_user(token, name, login_token, db)
-        return "User added successfully!"
+        preset_balances = get_preset_balances(token, db)
+        realtime_balances = get_realtime_balances(token, db)
+
+        # Create DataFrames for tables
+        preset_df = pd.DataFrame(preset_balances)
+        realtime_df = pd.DataFrame(realtime_balances)
+
+        # Calculate differences and percentage differences
+        if not preset_df.empty and not realtime_df.empty:
+            realtime_df['Difference'] = realtime_df['realtime_balance'] - preset_df['preset_balance']
+            realtime_df['Percentage Difference'] = (realtime_df['Difference'] / preset_df['preset_balance']) * 100
+
+            # Prepare table footers
+            total_preset = preset_df['preset_balance'].sum()
+            total_realtime = realtime_df['realtime_balance'].sum()
+            total_diff = total_realtime - total_preset
+            total_pct_diff = (total_diff / total_preset) * 100 if total_preset != 0 else 0
+
+            preset_footer = f"Total Preset Balance: {total_preset:.2f}"
+            realtime_footer = (f"Total Realtime Balance: {total_realtime:.2f}, "
+                               f"Total Difference: {total_diff:.2f}, "
+                               f"Total Percentage Difference: {total_pct_diff:.2f}%")
+        else:
+            preset_footer = "No data available"
+            realtime_footer = "No data available"
+
+        return preset_df, preset_footer, realtime_df, realtime_footer
     except Exception as e:
-        return f"Failed to add user: {str(e)}"
+        return pd.DataFrame(), f"Error: {str(e)}", pd.DataFrame(), f"Error: {str(e)}"
 
 
-def remove_user(token, name):
+def get_account_details(token, page_number=1):
     db = next(get_db())
     try:
-        if delete_user(token, name, db):
-            return "User deleted successfully!"
-        return "User deletion failed."
+        account_history = get_account_balance_history_tables(token, db, page_number)
+        history_df = pd.DataFrame(account_history)
+        return history_df
     except Exception as e:
-        return f"Failed to delete user: {str(e)}"
-
-
-def modify_user(token, name, login_token):
-    db = next(get_db())
-    try:
-        if update_user(token, name, login_token, db):
-            return "User updated successfully!"
-        return "User update failed."
-    except Exception as e:
-        return f"Failed to update user: {str(e)}"
-
-    def get_balances(token):
-        db = next(get_db())
-        try:
-            preset_balances = get_preset_balances(token, db)
-            realtime_balances = get_realtime_balances(token, db)
-
-            # Create DataFrames for tables
-            preset_df = pd.DataFrame(preset_balances)
-            realtime_df = pd.DataFrame(realtime_balances)
-
-            # Calculate differences and percentage differences
-            if not preset_df.empty and not realtime_df.empty:
-                realtime_df['Difference'] = realtime_df['realtime_balance'] - preset_df['preset_balance']
-                realtime_df['Percentage Difference'] = (realtime_df['Difference'] / preset_df['preset_balance']) * 100
-
-                # Prepare table footers
-                total_preset = preset_df['preset_balance'].sum()
-                total_realtime = realtime_df['realtime_balance'].sum()
-                total_diff = total_realtime - total_preset
-                total_pct_diff = (total_diff / total_preset) * 100 if total_preset != 0 else 0
-
-                preset_footer = f"Total Preset Balance: {total_preset:.2f}"
-                realtime_footer = (f"Total Realtime Balance: {total_realtime:.2f}, "
-                                   f"Total Difference: {total_diff:.2f}, "
-                                   f"Total Percentage Difference: {total_pct_diff:.2f}%")
-            else:
-                preset_footer = "No data available"
-                realtime_footer = "No data available"
-
-            return preset_df, preset_footer, realtime_df, realtime_footer
-        except Exception as e:
-            return pd.DataFrame(), f"Error: {str(e)}", pd.DataFrame(), f"Error: {str(e)}"
-
-    def get_account_details(token, page_number=1):
-        db = next(get_db())
-        try:
-            account_history = get_account_balance_history_tables(token, db, page_number)
-            history_df = pd.DataFrame(account_history)
-            return history_df
-        except Exception as e:
-            return pd.DataFrame(), f"Error: {str(e)}"
+        return pd.DataFrame(), f"Error: {str(e)}"
 
 
 # Initialize Gradio interface
@@ -285,7 +324,7 @@ def admin_interface():
         gr.Markdown("## User Management")
         with gr.Group(visible=False) as user_panel:
             with gr.Row():
-                select_user = gr.Dropdown(label="Select User", choices=[])
+                selected_user = gr.Dropdown(label="Select User", choices=[])
                 user_name_input = gr.Textbox(label="User Name")
                 login_token_input = gr.Textbox(label="Login Token")
                 with gr.Column():
@@ -295,7 +334,7 @@ def admin_interface():
                     with gr.Row():
                         update_user_button = gr.Button("Update")
 
-            gr.CheckboxGroup(label="Select Accounts", choices=[])
+            linked_accounts = gr.CheckboxGroup(label="Linked Accounts", choices=[], interactive=True)
 
         # ---- login ----
         login_action = login_button.click(
@@ -307,15 +346,16 @@ def admin_interface():
         add_acc_action = add_account_button.click(
             fn=add_account, inputs=[session_token, account_name_input, start_date_input], outputs=[action_status])
         delete_acc_action = delete_account_button.click(
-            fn=remove_account, inputs=[session_token, selected_account], outputs=[action_status])
+            fn=delete_account, inputs=[session_token, selected_account], outputs=[action_status])
         update_account_button.click(
             fn=modify_account, inputs=[session_token, account_name_input, start_date_input], outputs=[action_status])
         for a in [login_action, add_acc_action, delete_acc_action]:
             a.then(update_selectable_accounts, inputs=[session_token], outputs=[selected_account])
         for a in [add_acc_action, delete_acc_action]:
-            a.then(clear_account_panel, outputs=[selected_account, account_name_input, start_date_input])
+            a.then(clear_account_fields, outputs=[selected_account, account_name_input, start_date_input])
         selected_account.select(
-            fill_account, inputs=[session_token, selected_account], outputs=[account_name_input, start_date_input])
+            fill_account_fields, inputs=[session_token, selected_account],
+            outputs=[account_name_input, start_date_input])
         # ---- strategy ----
         add_strategy_button.click(
             fn=add_strategy, inputs=[session_token, selected_account, selected_strategy, api_key_input,
@@ -333,16 +373,23 @@ def admin_interface():
             api_key_input, secret_key_input, passphrase_input, exchange_type_input, preset_balance_input])
 
         # ---- user ----
-        add_user_button.click(fn=add_user,
-                              inputs=[session_token, user_name_input, login_token_input],
-                              outputs=[action_status])
-        delete_user_button.click(fn=remove_user,
-                                 inputs=[session_token, user_name_input],
-                                 outputs=[action_status])
-        update_user_button.click(fn=modify_user,
-                                 inputs=[session_token, user_name_input, login_token_input],
-                                 outputs=[action_status])
-
+        add_user_action = add_user_button.click(
+            add_user, inputs=[session_token, user_name_input, login_token_input, linked_accounts],
+            outputs=[action_status])
+        delete_user_action = delete_user_button.click(
+            remove_user, inputs=[session_token, selected_user], outputs=[action_status])
+        update_user_button.click(
+            update_user, inputs=[session_token, user_name_input, login_token_input, linked_accounts],
+            outputs=[action_status])
+        for a in [login_action, add_user_action, delete_user_action]:
+            a.then(update_selectable_users, inputs=[session_token], outputs=[selected_user])
+        for a in [add_user_action, delete_user_action]:
+            a.then(clear_user_fields, outputs=[selected_user, user_name_input, login_token_input])
+        for a in [login_action, add_acc_action, delete_acc_action, add_user_action, delete_user_action]:
+            a.then(fill_linked_accounts, inputs=[session_token, selected_user], outputs=[linked_accounts])
+        selected_user.select(
+            fill_user_fields, inputs=[session_token, selected_user],
+            outputs=[user_name_input, login_token_input, linked_accounts])
     return admin_ui
 
 

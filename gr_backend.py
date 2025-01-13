@@ -189,7 +189,7 @@ def delete_account(token: str, account_name: str, db: Session):
             UserAccountAssociation.account_id == account.id).all()
         for link in user_account_links:
             db.delete(link)
-        strategies = db.query(Strategy).filter(Strategy.account_id == account.id).all()
+        strategies = db.query(Strategy).filter(Strategy.account_name == account_name).all()
         for strategy in strategies:
             db.delete(strategy)
         db.commit()
@@ -308,45 +308,63 @@ def validate_exchange_credentials(exchange_type: str, api_key: str, secret_key: 
 
 # User Management
 
-def create_user(token: str, name: str, login_token: str, db: Session):
+def create_user(token: str, name: str, login_token: str, linked_account_names: List[str], db: Session):
     check_admin_token(token)
     new_user = User(name=name, login_token=login_token)
     db.add(new_user)
     db.commit()
+    logger.info(f"Created user {name}")
+    linked_accounts = db.query(Account).filter(Account.account_name.in_(linked_account_names)).all()
+    set_user_linked_account(token, name, [int(account.id) for account in linked_accounts], db)
+    logger.info(f"Linked accounts {linked_account_names} to user {name}")
     return new_user
 
 
-def delete_user(token: str, user_id: str, db: Session):
+def get_user(token: str, name: str, db: Session):
     check_admin_token(token)
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.name == name).first()
+    return user
+
+
+def list_users(token: str, db: Session):
+    check_admin_token(token)
+    users = db.query(User).all()
+    return users
+
+
+def delete_user(token: str, name: str, db: Session):
+    check_admin_token(token)
+    user = db.query(User).filter(User.name == name).first()
     if user:
         # Delete all user-account associations
         user_account_links = db.query(UserAccountAssociation).filter(
-            UserAccountAssociation.user_id == user_id).all()
+            UserAccountAssociation.user_id == user.id).all()
         for link in user_account_links:
             db.delete(link)
         # Delete the user
         db.delete(user)
         db.commit()
-        logger.info(f"Deleted user {user_id} and its associations")
+        logger.info(f"Deleted user {name} and its associations")
         return True
-    logger.warning(f"User {user_id} not found, deletion failed")
+    logger.warning(f"User {name} not found, deletion failed")
     return False
 
 
-def update_user(token: str, user_id: str, login_token: str, db: Session):
+def update_user(token: str, name: str, login_token: str, linked_account_names: List[str], db: Session):
     check_admin_token(token)
-    user = db.query(User).filter(User.id == user_id).first()
-    if user:
-        user.login_token = login_token
-        db.commit()
-        logger.info(f"Updated user {user_id}")
-        return user
-    logger.warning(f"User {user_id} not found, update failed")
-    return None
+    user = db.query(User).filter(User.name == name).first()
+    if not user:
+        logger.warning(f"User {name} not found, update failed")
+        return None
+    user.login_token = login_token
+    linked_accounts = db.query(Account).filter(Account.account_name.in_(linked_account_names)).all()
+    set_user_linked_account(token, name, [int(account.id) for account in linked_accounts], db)
+    db.commit()
+    logger.info(f"Updated user {name}")
+    return user
 
 
-def set_linked_account_to_user(token: str, user_name: str, account_ids: List[int], db: Session):
+def set_user_linked_account(token: str, user_name: str, account_ids: List[int], db: Session):
     check_admin_token(token)
     # First, get the user
     user = db.query(User).filter(User.name == user_name).first()
@@ -381,8 +399,9 @@ def retrieve_strategy_balance(strategy: Strategy) -> float:
     return balance['total']
 
 
-def get_linked_accounts(user_name: str, db: Session):
-    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_name).all()
+def get_user_linked_accounts(user_name: str, db: Session):
+    user = db.query(User).filter(User.name == user_name).first()
+    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user.id).all()
     account_ids = [link.account_id for link in linked_accounts]
     accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
     return accounts
