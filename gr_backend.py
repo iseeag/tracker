@@ -275,8 +275,35 @@ def update_strategy(token: str, account_name: str, strategy_name: str, api_key: 
     return None
 
 
-def validate_bitget_credentials(api_key: str, secret_key: str, passphrase: str) -> bool:
-    ...
+def validate_exchange_credentials(exchange_type: str, api_key: str, secret_key: str, passphrase: str = None) -> bool:
+    """
+    Validate exchange API credentials by attempting to fetch balance.
+    
+    Args:
+        exchange_type: The type of exchange (e.g., 'bitget', 'binance')
+        api_key: Exchange API key
+        secret_key: Exchange secret key
+        passphrase: Exchange passphrase (required for some exchanges like Bitget)
+    
+    Returns:
+        bool: True if credentials are valid, False otherwise
+    """
+    try:
+        exchange_class = getattr(ccxt, exchange_type.lower())
+        config = {'apiKey': api_key, 'secret': secret_key}
+        if passphrase:
+            config['password'] = passphrase
+        exchange = exchange_class(config)
+        exchange.fetch_balance()
+        logger.info(f"{exchange_type.capitalize()} credentials validation successful")
+        return True
+
+    except AttributeError:
+        logger.error(f"Unsupported exchange type: {exchange_type}")
+        return False
+    except Exception as e:
+        logger.error(f"{exchange_type.capitalize()} credentials validation failed: {str(e)}")
+        return False
 
 
 # User Management

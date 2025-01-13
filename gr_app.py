@@ -5,7 +5,7 @@ import gradio as gr
 import pandas as pd
 
 from gr_backend import (admin_login, create_account, create_user,
-                        delete_account, delete_user,
+                        delete_account, delete_user, validate_exchange_credentials,
                         get_account_balance_history_tables, get_db,
                         get_preset_balances, get_realtime_balances,
                         list_accounts, get_account, create_strategy)
@@ -130,6 +130,13 @@ def delete_strategy(token, account_name, strategy_name):
     if delete_strategy_backend(token, account_name, strategy_name, db):
         return "Strategy deleted successfully!"
     return "Strategy deletion failed."
+
+
+def validate_strategy(api_key, secret_key, passphrase, exchange_type):
+    null_check(api_key, secret_key, passphrase, exchange_type)
+    if validate_exchange_credentials(exchange_type, api_key, secret_key, passphrase):
+        return "Credentials are valid!"
+    return "Credentials are invalid!"
 
 
 # ######### ui react ###########
@@ -267,7 +274,7 @@ def admin_interface():
                                                           interactive=True, allow_custom_value=False)
                     with gr.Row():
                         api_key_input = gr.Textbox(label="API Key")
-                        secret_key_input = gr.Textbox(label="Secret Key")
+                        secret_key_input = gr.Textbox(label="Secret Key", max_lines=1)
                         passphrase_input = gr.Textbox(label="Passphrase", type="password")
                 with gr.Column():
                     add_strategy_button = gr.Button("Add")
@@ -319,7 +326,9 @@ def admin_interface():
             exchange_type_input, preset_balance_input], outputs=[action_status])
         delete_strategy_button.click(
             delete_strategy, inputs=[session_token, selected_account, selected_strategy], outputs=[action_status])
-        validate_strategy_button.click()
+        validate_strategy_button.click(
+            validate_strategy, inputs=[api_key_input, secret_key_input, passphrase_input, exchange_type_input],
+            outputs=[action_status])
         selected_strategy.select(get_strategy, inputs=[session_token, selected_account, selected_strategy], outputs=[
             api_key_input, secret_key_input, passphrase_input, exchange_type_input, preset_balance_input])
 
