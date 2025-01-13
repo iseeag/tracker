@@ -48,7 +48,7 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, unique=True)
-    login_token = Column(String)
+    login_token = Column(String, unique=True)
 
 
 class UserAccountAssociation(Base):
