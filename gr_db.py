@@ -33,7 +33,7 @@ class Strategy(Base):
     __tablename__ = APP_PREFIX + 'strategies'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    account_id = Column(Integer)
+    account_name = Column(String)
     strategy_name = Column(String)
     api_key = Column(String)
     secret_key = Column(String)

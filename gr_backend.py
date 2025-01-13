@@ -222,11 +222,11 @@ def list_accounts(token: str, db: Session):
     return accounts
 
 
-def create_strategy(token: str, account_id: int, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
+def create_strategy(token: str, account_name: str, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
                     exchange_type: str, preset_balance: float, db: Session):
     check_admin_token(token)
     new_strategy = Strategy(
-        account_id=account_id,
+        account_name=account_name,
         strategy_name=strategy_name,
         api_key=api_key,
         secret_key=secret_key,
@@ -241,22 +241,29 @@ def create_strategy(token: str, account_id: int, strategy_name: str, api_key: st
     return new_strategy
 
 
-def delete_strategy(token: str, strategy_id: str, db: Session):
+def get_strategy(token: str, account_name, strategy_name: str, db: Session):
     check_admin_token(token)
-    strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
+    strategy = db.query(Strategy).filter(Strategy.account_name == account_name,
+                                         Strategy.strategy_name == strategy_name).first()
+    return strategy
+
+
+def delete_strategy(token: str, account_name: str, strategy_name: str, db: Session):
+    check_admin_token(token)
+    strategy = get_strategy(token, account_name, strategy_name, db)
     if strategy:
         db.delete(strategy)
         db.commit()
-        logger.info(f"Deleted strategy {strategy_id}")
+        logger.info(f"Deleted strategy {strategy_name}")
         return True
-    logger.warning(f"Strategy {strategy_id} not found, deletion failed")
+    logger.warning(f"Strategy {strategy_name} not found, deletion failed")
     return False
 
 
-def update_strategy(token: str, strategy_id: str, api_key: str, secret_key: str, passphrase: str, exchange_type: str,
-                    preset_balance: float, db: Session):
+def update_strategy(token: str, account_name: str, strategy_name: str, api_key: str,
+                    secret_key: str, passphrase: str, exchange_type: str, preset_balance: float, db: Session):
     check_admin_token(token)
-    strategy = db.query(Strategy).filter(Strategy.id == strategy_id).first()
+    strategy = get_strategy(token, account_name, strategy_name, db)
     if strategy:
         strategy.api_key = api_key
         strategy.secret_key = secret_key
@@ -266,6 +273,10 @@ def update_strategy(token: str, strategy_id: str, api_key: str, secret_key: str,
         db.commit()
         return strategy
     return None
+
+
+def validate_bitget_credentials(api_key: str, secret_key: str, passphrase: str) -> bool:
+    ...
 
 
 # User Management

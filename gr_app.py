@@ -8,10 +8,18 @@ from gr_backend import (admin_login, create_account, create_user,
                         delete_account, delete_user,
                         get_account_balance_history_tables, get_db,
                         get_preset_balances, get_realtime_balances,
-                        list_accounts, get_account)
+                        list_accounts, get_account, create_strategy)
 from gr_backend import logout as user_logout_backend
 from gr_backend import update_account, update_user
 from gr_backend import user_login as user_login_backend
+from gr_backend import get_strategy as get_strategy_backend
+from gr_backend import update_strategy as update_strategy_backend
+from gr_backend import delete_strategy as delete_strategy_backend
+
+
+def null_check(*args):
+    if not all([*args]):
+        raise gr.Error("All fields are required!")
 
 
 # ######### backends ###########
@@ -36,6 +44,7 @@ def logout(token) -> Tuple[str, str]:
 
 
 def add_account(token, account_name, start_date: float):
+    null_check(account_name, start_date)
     db = next(get_db())
     start_date = (datetime.fromtimestamp(start_date)).strftime("%Y-%m-%d")
     try:
@@ -46,6 +55,7 @@ def add_account(token, account_name, start_date: float):
 
 
 def modify_account(token, account_name, start_date):
+    null_check(account_name, start_date)
     db = next(get_db())
     start_date = (datetime.fromtimestamp(start_date)).strftime("%Y-%m-%d")
     if update_account(token, account_name, start_date, db):
@@ -54,6 +64,7 @@ def modify_account(token, account_name, start_date):
 
 
 def remove_account(token, account_name):
+    null_check(account_name)
     db = next(get_db())
     try:
         if delete_account(token, account_name, db):
@@ -70,6 +81,55 @@ def update_selectable_accounts(token) -> gr.Dropdown:
     accounts = list_accounts(token, db)
     account_names = [account.account_name for account in accounts]
     return gr.Dropdown(choices=account_names)
+
+
+def add_strategy(token, account_name, strategy_name, api_key, secret_key, passphrase, exchange_type, preset_balance):
+    null_check(account_name, strategy_name, api_key, secret_key, exchange_type, preset_balance)
+    try:
+        preset_balance = float(preset_balance)
+    except ValueError:
+        raise gr.Error("Preset balance must be a number!")
+
+    db = next(get_db())
+    try:
+        create_strategy(token, account_name, strategy_name, api_key, secret_key, passphrase, exchange_type,
+                        preset_balance, db)
+        return "Strategy added successfully!"
+    except Exception as e:
+        return f"Failed to add strategy: {str(e)}"
+
+
+def get_strategy(token, account_name, strategy_name) -> Tuple[str, str, str, gr.Dropdown, str]:
+    null_check(account_name, strategy_name)
+    db = next(get_db())
+    strategy = get_strategy_backend(token, account_name, strategy_name, db)
+    if not strategy:
+        return "", "", "", gr.Dropdown(value=''), ""
+    return (strategy.api_key, strategy.secret_key, strategy.passphrase,
+            gr.Dropdown(value=strategy.exchange_type), strategy.preset_balance)
+
+
+def update_strategy(token, account_name, strategy_name, api_key, secret_key, passphrase, exchange_type, preset_balance):
+    null_check(account_name, strategy_name, api_key, secret_key, exchange_type, preset_balance)
+    print(account_name, strategy_name, api_key, secret_key, exchange_type, preset_balance)
+    try:
+        preset_balance = float(preset_balance)
+    except ValueError:
+        raise gr.Error("Preset balance must be a number!")
+
+    db = next(get_db())
+    if update_strategy_backend(token, account_name, strategy_name, api_key, secret_key, passphrase, exchange_type,
+                               preset_balance, db):
+        return "Strategy updated successfully!"
+    return "Strategy update failed."
+
+
+def delete_strategy(token, account_name, strategy_name):
+    null_check(account_name, strategy_name)
+    db = next(get_db())
+    if delete_strategy_backend(token, account_name, strategy_name, db):
+        return "Strategy deleted successfully!"
+    return "Strategy deletion failed."
 
 
 # ######### ui react ###########
@@ -187,7 +247,6 @@ def admin_interface():
                 selected_account = gr.Dropdown(label="Select Accounts", choices=[], interactive=True)
                 account_name_input = gr.Textbox(label="Account Name")
                 start_date_input = gr.DateTime(label="Start Date", include_time=False)
-                # list accounts with drop down when clicked show strategies and update and delete buttons
                 with gr.Column():
                     with gr.Row():
                         add_account_button = gr.Button("Add")
@@ -200,18 +259,20 @@ def admin_interface():
             with gr.Row():
                 with gr.Column(scale=3):
                     with gr.Row():
-                        selectable_strategies = gr.Dropdown(label="Select Strategy", choices=[])
+                        selected_strategy = gr.Dropdown(
+                            value='', label="Select Strategy", choices=['AI', 'DCA', 'CRYPTO', 'MARTINGALE'],
+                            interactive=True)
                         preset_balance_input = gr.Textbox(label="Preset Balance")
                         exchange_type_input = gr.Dropdown(label="Exchange Type", choices=["bitget", "binance"],
-                                                          interactive=True)
+                                                          interactive=True, allow_custom_value=False)
                     with gr.Row():
                         api_key_input = gr.Textbox(label="API Key")
                         secret_key_input = gr.Textbox(label="Secret Key")
-                        passphrase_input = gr.Textbox(label="Passphrase")
+                        passphrase_input = gr.Textbox(label="Passphrase", type="password")
                 with gr.Column():
                     add_strategy_button = gr.Button("Add")
-                    delete_strategy_button = gr.Button("Delete")
                     update_strategy_button = gr.Button("Update")
+                    delete_strategy_button = gr.Button("Delete")
                     validate_strategy_button = gr.Button("Validate")
 
         gr.Markdown("## User Management")
@@ -229,11 +290,13 @@ def admin_interface():
 
             gr.CheckboxGroup(label="Select Accounts", choices=[])
 
+        # ---- login ----
         login_action = login_button.click(
             fn=master_login, inputs=[master_token_input], outputs=[session_token, action_status])
         logout_button.click(fn=logout, inputs=[session_token], outputs=[session_token, action_status])
         session_token.change(
             fn=toggle_panels_x3, inputs=[session_token], outputs=[account_panel, strategy_panel, user_panel])
+        # ---- account ----
         add_acc_action = add_account_button.click(
             fn=add_account, inputs=[session_token, account_name_input, start_date_input], outputs=[action_status])
         delete_acc_action = delete_account_button.click(
@@ -246,7 +309,21 @@ def admin_interface():
             a.then(clear_account_panel, outputs=[selected_account, account_name_input, start_date_input])
         selected_account.select(
             fill_account, inputs=[session_token, selected_account], outputs=[account_name_input, start_date_input])
+        # ---- strategy ----
+        add_strategy_button.click(
+            fn=add_strategy, inputs=[session_token, selected_account, selected_strategy, api_key_input,
+                                     secret_key_input, passphrase_input, exchange_type_input, preset_balance_input],
+            outputs=[action_status])
+        update_strategy_button.click(update_strategy, inputs=[
+            session_token, selected_account, selected_strategy, api_key_input, secret_key_input, passphrase_input,
+            exchange_type_input, preset_balance_input], outputs=[action_status])
+        delete_strategy_button.click(
+            delete_strategy, inputs=[session_token, selected_account, selected_strategy], outputs=[action_status])
+        validate_strategy_button.click()
+        selected_strategy.select(get_strategy, inputs=[session_token, selected_account, selected_strategy], outputs=[
+            api_key_input, secret_key_input, passphrase_input, exchange_type_input, preset_balance_input])
 
+        # ---- user ----
         add_user_button.click(fn=add_user,
                               inputs=[session_token, user_name_input, login_token_input],
                               outputs=[action_status])
