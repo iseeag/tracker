@@ -395,7 +395,14 @@ def admin_interface():
 
 def user_interface():
     session_token = gr.State("")  # Initialize empty session token
-
+    tables = gr.State({
+        "summarized_preset": pd.DataFrame(),
+        "summarized_realtime": pd.DataFrame(),
+        "linked_accounts": [{"A_account": {
+            "preset": pd.DataFrame(),
+            "realtime": pd.DataFrame(),
+            "history": {'2025-01-01:2026-01-01': pd.DataFrame()}}}],
+    })  # Initialize empty tables
     with gr.Blocks() as user_ui:
         with gr.Row():
             gr.Markdown("# User Panel")
@@ -403,19 +410,19 @@ def user_interface():
         gr.Markdown("## Login")
         with gr.Group():
             with gr.Row():
-                login_token_input = gr.Textbox(label="Login Token", type="password", scale=3)
+                login_token_input = gr.Textbox(label="Login Token", type="password", scale=3, value='abc')
                 with gr.Column():
                     login_button = gr.Button("Login")
                     logout_button = gr.Button("Logout")
 
         gr.Markdown("## Summarized Account Balance")
         with gr.Row(visible=False) as account_balance_panel:
-            preset_balance_table = gr.DataFrame(
+            summarized_preset_table = gr.DataFrame(
                 scale=2,
                 label="Total Initial Balance",
                 value=pd.DataFrame([['alksdjfl', 9384093, ], ['slkdjfs', 33948]],
                                    columns=["Account Name", "Preset Balance"]))
-            realtime_balance_table = gr.DataFrame(
+            summarized_realtime_table = gr.DataFrame(
                 scale=4,
                 label="Total Realtime Balance",
                 value=pd.DataFrame([['alksdjfl', 9384093, 39, 30], ['slkdjfs', 33948, 30, 89],
@@ -432,29 +439,31 @@ def user_interface():
                     with gr.Row():
                         preset_balance_table = gr.DataFrame(
                             scale=2,
-                            label="Total Initial Balance",
+                            label="Initial Balance",
                             value=pd.DataFrame([['alksdjfl', 9384093, ], ['slkdjfs', 33948]],
                                                columns=["Account Name", "Preset Balance"]))
                         realtime_balance_table = gr.DataFrame(
                             scale=4,
-                            label="Total Realtime Balance",
+                            label="Realtime Balance",
                             value=pd.DataFrame([['alksdjfl', 9384093, 39, 30], ['slkdjfs', 33948, 30, 89],
                                                 ['3lksdj', 230983, 39, 30], ['Total', 20390, 30, 30]],
                                                columns=["Account Name", "Realtime Balance", "Difference",
                                                         "Percentage Difference"]))
                         preset_tables.append(preset_balance_table)
                         realtime_tables.append(realtime_balance_table)
+                    history_label = gr.Markdown("### Account Balance History")
+                    with gr.Row():
+                        start_date = gr.DateTime(
+                            value='2025-01-01', label="Start Date", include_time=False, interactive=True)
+                        end_date = gr.DateTime(
+                            value='2026-01-01', label="End Date", include_time=False, interactive=True)
                     history_table = gr.DataFrame(
                         scale=4,
-                        label="Account Balance History",
                         value=pd.DataFrame(
                             [["2021-01-01", 9384093, 9384093, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
                             columns=["Date", "S1", "S2", "S3", "Total", "Diff1", "Diff2", "Diff3", "Total Diff",
                                      "Pct Diff1", "Pct Diff2", "Pct Diff3", "Total Pct Diff"]))
                     history_tables.append(history_table)
-                    with gr.Row():
-                        previous_page_button = gr.Button("Previous Page")
-                        next_page_button = gr.Button("Next Page")
 
     login_button.click(fn=user_login, inputs=[login_token_input], outputs=[session_token, action_status])
     logout_button.click(fn=logout, inputs=[session_token], outputs=[session_token, action_status])
@@ -467,9 +476,9 @@ def user_interface():
 if __name__ == "__main__":
     with gr.Blocks() as app:
         gr.Markdown("# Asset Tracker App")
-        with gr.Tab("Admin"):
-            admin_interface()
         with gr.Tab("User"):
             user_interface()
+        with gr.Tab("Admin"):
+            admin_interface()
 
     app.launch(inbrowser=True)
