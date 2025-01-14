@@ -378,29 +378,29 @@ def user_interface():
             if token and date_range_list:
                 balance_tables = get_tables(token, date_range_list)
             else:
-                balance_tables = {"summarized_preset": pd.DataFrame(),
-                                  "summarized_realtime": pd.DataFrame(),
-                                  "linked_accounts": [{"account": {
-                                      "preset": pd.DataFrame(),
-                                      "realtime": pd.DataFrame(),
-                                      "history": {'2025-01-01:2026-01-01': pd.DataFrame()}}}]}
+                balance_tables = {"summarized": pd.DataFrame(),
+                                  "linked_accounts": [{
+                                      'name': 'N/A',
+                                      'start_date': '2025-01-01',
+                                      "data": pd.DataFrame(),
+                                      "history": {'start_date': '2025-01-01',
+                                                  'end_date': '2026-01-01',
+                                                  'data': pd.DataFrame()},
+                                  }]}
             gr.Markdown(lambda: f"## Summarized Account Balance `{datetime.now().strftime('%Y-%m-%d %H:%M')}`",
                         every=60.0)
             with gr.Row():
-                gr.DataFrame(scale=2, label="Total Initial Balance", value=balance_tables["summarized_preset"])
-                gr.DataFrame(scale=4, label="Total Realtime Balance", value=balance_tables["summarized_realtime"])
+                gr.DataFrame(label="Total Balance", value=balance_tables["summarized"], show_label=False)
             gr.Markdown("## Account Details")
             with gr.Group():
                 for i, account in enumerate(balance_tables["linked_accounts"]):
-                    account_name = list(account.keys())[0]
-                    preset_df = account[account_name]['preset']
-                    realtime_df = account[account_name]['realtime']
-                    date_range, history_df = list(account[account_name]['history'].items())[0]
-                    start_date, end_date = date_range.split(':')
-                    with gr.Accordion(label=account_name, open=False):
-                        with gr.Row():
-                            gr.DataFrame(scale=2, label="Initial Balance", value=preset_df)
-                            gr.DataFrame(scale=4, label="Realtime Balance", value=realtime_df)
+                    account_name = account['name']
+                    account_df = account['data']
+                    account_start_date = account['start_date']
+                    history_df = account['history']['data']
+                    start_date, end_date = account['history']['start_date'], account['history']['end_date']
+                    with gr.Accordion(label=f"< {account_name} > since {account_start_date} ", open=False):
+                        gr.DataFrame(value=account_df, show_label=False)
                         gr.Markdown("### Account Balance History")
                         with gr.Row():
                             start_date = gr.DateTime(

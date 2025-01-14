@@ -91,24 +91,32 @@ def retrieve_multi_info(user_id: str, db: Session):
 
 def get_tables(token: str, date_ranges: Dict[str, Tuple[str, str]], db: Session) -> Dict:
     """
-    {"summarized_preset": summarized_preset_table,
-     "summarized_realtime": summarized_realtime_table,
-     "linked_accounts": [{"A_account": {
-         "preset": preset_balance_table,
-         "realtime": realtime_balance_table,
-         "history": {'2025-01-01:2026-01-01': history_table}}} for _ in range(3)]}
+     {"summarized_preset": pd.DataFrame(),
+      "summarized_realtime": pd.DataFrame(),
+      "linked_accounts": [{
+          'name': 'account',
+          'start_date': '2025-01-01',
+          "preset": pd.DataFrame(),
+          "realtime": pd.DataFrame(),
+          "history": {'start_date': '2025-01-01',
+                      'end_date': '2026-01-01',
+                      'data': pd.DataFrame()},
+      }]}
     """
-
     user_id = get_user_id(token)
     accounts, strategies = retrieve_multi_info(user_id, db)
     account_ids = [account.id for account in accounts]
     account_names = [str(account.account_name) for account in accounts]
+    date_str_ranges = date_ranges
+    date_ranges = {account_name: (datetime.strptime(s, "%Y-%m-%d").date(),
+                                  datetime.strptime(e, "%Y-%m-%d").date())
+                   for account_name, (s, e) in date_str_ranges.items()}
     strategy_id_name = {s.id: s.strategy_name for s in strategies}
     account_balance_history = [db.query(AccountBalanceHistory).filter(
-        AccountBalanceHistory.timestamp >= datetime.strptime(date_ranges[an][0], "%Y-%m-%d").date(),
-        AccountBalanceHistory.timestamp <= datetime.strptime(date_ranges[an][1], "%Y-%m-%d").date(),
-        AccountBalanceHistory.account_id == aid
-    ).all() for aid, an in zip(account_ids, account_names)]
+        AccountBalanceHistory.timestamp >= date_ranges[account_name][0],
+        AccountBalanceHistory.timestamp <= date_ranges[account_name][1],
+        AccountBalanceHistory.account_id == account_id
+    ).all() for account_id, account_name in zip(account_ids, account_names)]
 
     account_balances = [AccountBalances(
         name=str(account.account_name),
@@ -126,23 +134,25 @@ def get_tables(token: str, date_ranges: Dict[str, Tuple[str, str]], db: Session)
         strategy_balance_records=[
             StrategyBalanceRecord(
                 name=str(strategy_id_name[record.strategy_id]),
-                account_name=str(account.account_name),
                 balance=float(record.balance),
                 timestamp=record.timestamp
             ) for record in account_histories
         ],
-        record_start_date=date_ranges[str(account.account_name)][0],
-        record_end_date=date_ranges[str(account.account_name)][1]
+        record_start_date=date_str_ranges[str(account.account_name)][0],
+        record_end_date=date_str_ranges[str(account.account_name)][1]
     ) for account, account_histories in zip(accounts, account_balance_history)]
-    return {
-        "summarized_preset": AccountBalances.sum_preset_df(account_balances),
-        "summarized_realtime": AccountBalances.sum_realtime_df(account_balances),
-        "linked_accounts": [{str(account.name): {
-            "preset": account.preset_df,
-            "realtime": account.realtime_df,
-            "history": {f"{account.record_start_date}:{account.record_end_date}": account.record_df}
-        } for account in account_balances}]
-    }
+
+    return {"summarized": AccountBalances.sum_df(account_balances),
+            "linked_accounts": [{
+                "name": str(account.name),
+                "start_date": str(account.start_date),
+                "data": account.account_df,
+                "history": {
+                    "start_date": account.record_start_date,
+                    "end_date": account.record_end_date,
+                    "data": account.record_df,
+                }
+            } for account in account_balances]}
 
 
 def check_admin_token(token: str):

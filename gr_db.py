@@ -77,60 +77,57 @@ class StrategyBalance(BaseModel):
 
 
 class StrategyBalanceRecord(StrategyBalance):
-    account_name: str
     timestamp: datetime
 
 
 class AccountBalances(BaseModel):
     name: str
     start_date: str
-    preset_balances: list[StrategyBalance]
-    realtime_balances: list[StrategyBalance]
-    strategy_balance_records: list[StrategyBalance]
+    preset_balances: List[StrategyBalance]
+    realtime_balances: List[StrategyBalance]
+    strategy_balance_records: List[StrategyBalanceRecord]
     record_start_date: str
     record_end_date: str
 
     @property
-    def preset_df(self) -> pd.DataFrame:
-        return pd.DataFrame(
-            data=[(balance.name, balance.balance) for balance in self.preset_balances],
-            columns=['Strategy Name', 'Preset Balance']
+    def account_df(self) -> pd.DataFrame:
+        account_df = pd.DataFrame(
+            data=[(preset_balance.name, preset_balance.balance, realtime_balance.balance)
+                  for preset_balance, realtime_balance in zip(self.preset_balances, self.realtime_balances)],
+            columns=["Strategy Name", "Preset Balance $", "Realtime Balance $"]
         )
-
-    @property
-    def realtime_df(self) -> pd.DataFrame:
-        preset_df = self.preset_df
-        realtime_df = pd.DataFrame(
-            data=[(balance.name, balance.balance) for balance in self.realtime_balances],
-            columns=["Strategy Name", "Realtime Balance"]
-        )
-        realtime_df['Difference'] = (realtime_df['Realtime Balance'] - preset_df['Preset Balance']).round(4)
-        realtime_df['Percentage Difference'] = (realtime_df['Difference'] / preset_df['Preset Balance']).round(4) * 100
-        return realtime_df
+        account_df['Difference $'] = (account_df['Realtime Balance $'] - account_df['Preset Balance $']).round(4)
+        account_df['Percentage Difference %'] = (account_df['Difference $'] / account_df['Preset Balance $']).round(
+            4) * 100
+        return account_df
 
     @property
     def record_df(self) -> pd.DataFrame:
         return pd.DataFrame()
 
     @classmethod
-    def sum_preset_df(cls, balances: List['AccountBalances']) -> pd.DataFrame:
-        summary = {}
+    def sum_df(cls, balances: List['AccountBalances']) -> pd.DataFrame:
+        summary = []
         for balance in balances:
-            summary[balance.name] = round(sum([b.balance for b in balance.preset_balances]), 4)
-        return pd.DataFrame(summary.items(), columns=['Account Name', 'Total Preset Balance'])
+            summary.append((
+                balance.name,
+                round(sum([b.balance for b in balance.preset_balances]), 4),
+                round(sum([b.balance for b in balance.realtime_balances]), 4),
+            ))
+        sum_df = pd.DataFrame(summary, columns=['Account Name', 'Total Preset Balance $', 'Total Realtime Balance $'])
+        sum_df['Total Difference $'] = sum_df['Total Realtime Balance $'] - sum_df['Total Preset Balance $']
+        sum_df['Percentage Difference %'] = (sum_df['Total Difference $'] / sum_df['Total Preset Balance $']).round(
+            4) * 100
+        return sum_df
 
-    @classmethod
-    def sum_realtime_df(cls, balances: List['AccountBalances']) -> pd.DataFrame:
-        summary = {}
-        for balance in balances:
-            summary[balance.name] = round(sum([b.balance for b in balance.realtime_balances]), 4)
-        sum_preset_df = cls.sum_preset_df(balances)
-        sum_realtime_df = pd.DataFrame(summary.items(), columns=['Account Name', 'Total Realtime Balance'])
-        sum_realtime_df['Total Difference'] = (sum_realtime_df['Total Realtime Balance'] - sum_preset_df[
-            'Total Preset Balance']).round(4)
-        sum_realtime_df['Percentage Difference'] = (sum_realtime_df['Total Difference'] / sum_preset_df[
-            'Total Preset Balance']).round(4) * 100
-        return sum_realtime_df
 
 # Create tables
 # Base.metadata.create_all(bind=engine)
+
+if __name__ == '__main__':
+    dummy_df = pd.DataFrame(
+        data=[('Strategy 1', 100.0, datetime.now()),
+              ('Strategy 2', None, None),
+              ('Strategy 3', 300.0, datetime.now())],
+        columns=['Strategy Name', 'Balance', 'Timestamp']
+    )
