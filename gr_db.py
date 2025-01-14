@@ -3,7 +3,6 @@ from datetime import datetime
 from typing import List
 
 import pandas as pd
-from dask.rewrite import strategies
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from sqlalchemy import Column, Date, Float, Integer, String, create_engine

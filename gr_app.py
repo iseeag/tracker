@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 import gradio as gr
 import pandas as pd
