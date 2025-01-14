@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List, Tuple
+import time
 
 import gradio as gr
 import pandas as pd
@@ -270,6 +271,32 @@ def get_account_details(token, page_number=1):
         return pd.DataFrame(), f"Error: {str(e)}"
 
 
+def get_tables(token, start_date: str = None, end_date: str = None):
+    summarized_preset_table = pd.DataFrame([['alksdjfl', 9384093, ], ['slkdjfs', 33948]],
+                                           columns=["Account Name", "Preset Balance"])
+    summarized_realtime_table = pd.DataFrame(
+        [['alksdjfl', 9384093, 39, 30], ['slkdjfs', 33948, 30, 89],
+         ['3lksdj', 230983, 39, 30], ['Total', 20390, 30, 30]],
+        columns=["Account Name", "Realtime Balance", "Difference", "Percentage Difference"])
+    preset_balance_table = pd.DataFrame([['alksdjfl', 9384093, ], ['slkdjfs', 33948]],
+                                        columns=["Account Name", "Preset Balance"])
+    realtime_balance_table = pd.DataFrame(
+        [['alksdjfl', 9384093, 39, 30], ['slkdjfs', 33948, 30, 89],
+         ['3lksdj', 230983, 39, 30], ['Total', 20390, 30, 30]],
+        columns=["Account Name", "Realtime Balance", "Difference",
+                 "Percentage Difference"])
+    history_table = pd.DataFrame(
+        [["2021-01-01", 9384093, 9384093, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+        columns=["Date", "S1", "S2", "S3", "Total", "Diff1", "Diff2", "Diff3", "Total Diff",
+                 "Pct Diff1", "Pct Diff2", "Pct Diff3", "Total Pct Diff"])
+    return {"summarized_preset": summarized_preset_table,
+            "summarized_realtime": summarized_realtime_table,
+            "linked_accounts": [{"A_account": {
+                "preset": preset_balance_table,
+                "realtime": realtime_balance_table,
+                "history": {'2025-01-01:2026-01-01': history_table}}} for _ in range(3)]}
+
+
 # Initialize Gradio interface
 def admin_interface():
     session_token = gr.State("")  # Initialize empty session token
@@ -398,7 +425,7 @@ def user_interface():
     tables = gr.State({
         "summarized_preset": pd.DataFrame(),
         "summarized_realtime": pd.DataFrame(),
-        "linked_accounts": [{"A_account": {
+        "linked_accounts": [{"account": {
             "preset": pd.DataFrame(),
             "realtime": pd.DataFrame(),
             "history": {'2025-01-01:2026-01-01': pd.DataFrame()}}}],
@@ -415,60 +442,41 @@ def user_interface():
                     login_button = gr.Button("Login")
                     logout_button = gr.Button("Logout")
 
-        gr.Markdown("## Summarized Account Balance")
-        with gr.Row(visible=False) as account_balance_panel:
-            summarized_preset_table = gr.DataFrame(
-                scale=2,
-                label="Total Initial Balance",
-                value=pd.DataFrame([['alksdjfl', 9384093, ], ['slkdjfs', 33948]],
-                                   columns=["Account Name", "Preset Balance"]))
-            summarized_realtime_table = gr.DataFrame(
-                scale=4,
-                label="Total Realtime Balance",
-                value=pd.DataFrame([['alksdjfl', 9384093, 39, 30], ['slkdjfs', 33948, 30, 89],
-                                    ['3lksdj', 230983, 39, 30], ['Total', 20390, 30, 30]],
-                                   columns=["Account Name", "Realtime Balance", "Difference", "Percentage Difference"]))
-
-        gr.Markdown("## Account Details")
-        preset_tables = []
-        realtime_tables = []
-        history_tables = []
-        with gr.Group(visible=False) as account_details_panel:
-            for i in range(3):
-                with gr.Accordion(label=f"A Account", open=False):
-                    with gr.Row():
-                        preset_balance_table = gr.DataFrame(
-                            scale=2,
-                            label="Initial Balance",
-                            value=pd.DataFrame([['alksdjfl', 9384093, ], ['slkdjfs', 33948]],
-                                               columns=["Account Name", "Preset Balance"]))
-                        realtime_balance_table = gr.DataFrame(
-                            scale=4,
-                            label="Realtime Balance",
-                            value=pd.DataFrame([['alksdjfl', 9384093, 39, 30], ['slkdjfs', 33948, 30, 89],
-                                                ['3lksdj', 230983, 39, 30], ['Total', 20390, 30, 30]],
-                                               columns=["Account Name", "Realtime Balance", "Difference",
-                                                        "Percentage Difference"]))
-                        preset_tables.append(preset_balance_table)
-                        realtime_tables.append(realtime_balance_table)
-                    history_label = gr.Markdown("### Account Balance History")
-                    with gr.Row():
-                        start_date = gr.DateTime(
-                            value='2025-01-01', label="Start Date", include_time=False, interactive=True)
-                        end_date = gr.DateTime(
-                            value='2026-01-01', label="End Date", include_time=False, interactive=True)
-                    history_table = gr.DataFrame(
-                        scale=4,
-                        value=pd.DataFrame(
-                            [["2021-01-01", 9384093, 9384093, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-                            columns=["Date", "S1", "S2", "S3", "Total", "Diff1", "Diff2", "Diff3", "Total Diff",
-                                     "Pct Diff1", "Pct Diff2", "Pct Diff3", "Total Pct Diff"]))
-                    history_tables.append(history_table)
+        @gr.render(tables)
+        def render_tables(balance_tables):
+            gr.Markdown(lambda: f"## Summarized Account Balance `{datetime.now().strftime('%Y-%m-%d %H:%M')}`",
+                        every=60.0)
+            with gr.Row():
+                gr.DataFrame(scale=2, label="Total Initial Balance", value=balance_tables["summarized_preset"])
+                gr.DataFrame(scale=4, label="Total Realtime Balance", value=balance_tables["summarized_realtime"])
+            gr.Markdown("## Account Details")
+            with gr.Group():
+                for account in balance_tables["linked_accounts"]:
+                    account_name = list(account.keys())[0]
+                    preset_df = account[account_name]['preset']
+                    realtime_df = account[account_name]['realtime']
+                    date_range, history_df = list(account[account_name]['history'].items())[0]
+                    start_date, end_date = date_range.split(':')
+                    with gr.Accordion(label=account_name, open=False):
+                        with gr.Row():
+                            gr.DataFrame(scale=2, label="Initial Balance", value=preset_df)
+                            gr.DataFrame(scale=4, label="Realtime Balance", value=realtime_df)
+                        gr.Markdown("### Account Balance History")
+                        with gr.Row():
+                            start_date = gr.DateTime(
+                                value=start_date, label="Start Date", include_time=False, interactive=True)
+                            end_date = gr.DateTime(
+                                value=end_date, label="End Date", include_time=False, interactive=True)
+                            with gr.Column():
+                                gr.Button('-', interactive=False)
+                                reload_button = gr.Button("Reload")
+                        gr.DataFrame(scale=4, value=history_df)
+                    reload_button.click(
+                        get_tables, inputs=[session_token, start_date, end_date], outputs=tables)
 
     login_button.click(fn=user_login, inputs=[login_token_input], outputs=[session_token, action_status])
     logout_button.click(fn=logout, inputs=[session_token], outputs=[session_token, action_status])
-    session_token.change(fn=toggle_panels_x2, inputs=[session_token],
-                         outputs=[account_balance_panel, account_details_panel])
+    session_token.change(fn=get_tables, inputs=[session_token], outputs=[tables])
 
     return user_ui
 
