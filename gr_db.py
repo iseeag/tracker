@@ -106,15 +106,15 @@ class AccountBalances(BaseModel):
     def record_df(self) -> pd.DataFrame:
         record_by_date = {}
         for record in self.strategy_balance_records:
-            if record.timestamp not in record_by_date:
-                record_by_date[record.timestamp] = {}
-            record_by_date[record.timestamp] = record_by_date[record.timestamp] | {record.name: record.balance}
+            record_date = record.timestamp.strftime('%Y-%m-%d')
+            if record_date not in record_by_date:
+                record_by_date[record_date] = {}
+            record_by_date[record_date] = record_by_date[record_date] | {record.name: record.balance}
         record_by_date = [(date, record) for date, record in record_by_date.items()]
         record_by_date = sorted(record_by_date, key=lambda x: x[0])
         data = []
         presets = [balance.balance for balance in self.preset_balances]
         for date, record in record_by_date:
-            date = date.strftime('%Y-%m-%d')
             hists = [round(record.get(p.name, float('nan')), 4) for p in self.preset_balances]
             diffs = [round(hist - preset, 4) for hist, preset in zip(hists, presets)]
             percents = [round(diff / preset * 100, 4) if not pd.isna(diffs) else float('nan')

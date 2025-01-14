@@ -415,10 +415,10 @@ def user_interface():
                     def _set_date_ranges(s, sd, ed):
                         sd = (datetime.fromtimestamp(sd)).strftime("%Y-%m-%d")
                         ed = (datetime.fromtimestamp(ed)).strftime("%Y-%m-%d")
-                        set_date_ranges(s, sd, ed, account_name)
+                        return set_date_ranges(s, sd, ed, account_name)
 
                     reload_button.click(
-                        _set_date_ranges, inputs=[session_token, start_date, end_date], outputs=date_ranges)
+                        _set_date_ranges, inputs=[session_token, start_date, end_date], outputs=[date_ranges])
 
     login_action = login_button.click(fn=user_login, inputs=[login_token_input], outputs=[session_token, action_status])
     login_action.then(fn=set_date_ranges, inputs=[session_token], outputs=[date_ranges])
