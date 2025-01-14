@@ -1,8 +1,9 @@
+import abc
 import hashlib
 import os
 import uuid
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import ccxt
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -11,9 +12,8 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from gr_db import (Account, AccountBalanceHistory, AccountBalances,
-                   PresetAccountBalance, RealtimeAccountBalance, SessionLocal,
-                   Strategy, StrategyBalance, StrategyBalanceRecord, User,
-                   UserAccountAssociation)
+                   SessionLocal, Strategy, StrategyBalance,
+                   StrategyBalanceRecord, User, UserAccountAssociation)
 
 load_dotenv()
 current_session_tokens = {}
@@ -81,88 +81,71 @@ def get_user_id(session_token: str):
 
 
 def retrieve_multi_info(user_id: str, db: Session):
-    linked_accounts = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
-    account_ids = [link.account_id for link in linked_accounts]
+    linked_acc_ids = db.query(UserAccountAssociation).filter(UserAccountAssociation.user_id == user_id).all()
+    account_ids = [link.account_id for link in linked_acc_ids]
     accounts = db.query(Account).filter(Account.id.in_(account_ids)).all()
-    strategies = db.query(Strategy).filter(Strategy.account_id.in_(account_ids)).all()
+    account_names = [a.account_name for a in accounts]
+    strategies = db.query(Strategy).filter(Strategy.account_name.in_(account_names)).all()
     return accounts, strategies
 
 
-def get_preset_balances(token: str, db: Session) -> Dict[str, PresetAccountBalance]:
-    user_id = get_user_id(token)
-    accounts, strategies = retrieve_multi_info(user_id, db)
-    # preset_balances = {str(a.account_name): {'start_date': a.start_date,
-    #                                          'strategies': [
-    #                                              {
-    #                                                  'strategy_name': strategy.strategy_name,
-    #                                                  'preset_balance': strategy.preset_balance
-    #                                              } for strategy in strategies if strategy.account_id == a.id]}
-    #                    for a in accounts}
-    preset_balances = {str(a.account_name): PresetAccountBalance(
-        name=str(a.account_name),
-        start_date=str(a.start_date),
-        strategy_balances=[
-            StrategyBalance(name=str(s.strategy_name),
-                            balance=float(s.preset_balance))
-            for s in strategies if s.account_id == a.id])
-        for a in accounts}
-    return preset_balances
+def get_tables(token: str, date_ranges: Dict[str, Tuple[str, str]], db: Session) -> Dict:
+    """
+    {"summarized_preset": summarized_preset_table,
+     "summarized_realtime": summarized_realtime_table,
+     "linked_accounts": [{"A_account": {
+         "preset": preset_balance_table,
+         "realtime": realtime_balance_table,
+         "history": {'2025-01-01:2026-01-01': history_table}}} for _ in range(3)]}
+    """
 
-
-def get_realtime_balances(token: str, db: Session) -> Dict[str, RealtimeAccountBalance]:
-    user_id = get_user_id(token)
-    accounts, strategies = retrieve_multi_info(user_id, db)
-    realtime_balances = {}
-    # for account in accounts:
-    #     strategies_bal = []
-    #     for strategy in [s for s in strategies if s.account_id == account.id]:
-    #         strategy_balance = retrieve_strategy_balance(strategy)
-    #         data = {'strategy_name': strategy.strategy_name,
-    #                 'realtime_balance': strategy_balance}
-    #         strategies_bal.append(data)
-    #         realtime_strategy_balances.append(data)
-    #     realtime_balances[str(account.account_name)] = strategies_bal
-    for account in accounts:
-        records = [StrategyBalance(
-            name=str(strategy.strategy_name),
-            balance=float(retrieve_strategy_balance(strategy))
-        ) for strategy in [s for s in strategies if s.account_id == account.id]]
-        realtime_balance = RealtimeAccountBalance(name=str(account.account_name),
-                                                  strategy_balances=records)
-        realtime_balances[str(account.account_name)] = realtime_balance
-    return realtime_balances
-
-
-def get_account_balance_history_tables(
-        token: str, db: Session, page_number: int = 1, page_size: int = 10
-) -> Dict[str, List[StrategyBalanceRecord]]:
     user_id = get_user_id(token)
     accounts, strategies = retrieve_multi_info(user_id, db)
     account_ids = [account.id for account in accounts]
-    strategies_names = {s.id: s.strategy_name for s in strategies}
-    balance_history = db.query(AccountBalanceHistory).filter(
-        AccountBalanceHistory.account_id.in_(account_ids)).offset((page_number - 1) * page_size).limit(
-        page_size).all()
-    account_bal_hist = {}
-    for account in accounts:
-        # records = [{
-        #     'strategy_name': strategies_names[record.strategy_id],
-        #     'balance': record.balance,
-        #     'timestamp': record.timestamp
-        # } for record in balance_history if record.account_id == account.id]
-        records = [StrategyBalanceRecord(
-            name=str(strategies_names[record.strategy_id]),
-            account_name=str(account.account_name),
-            balance=float(record.balance),
-            timestamp=str(record.timestamp)
-        ) for record in balance_history if record.account_id == account.id]
-        account_bal_hist[str(account.account_name)] = records
-    return account_bal_hist
+    account_names = [str(account.account_name) for account in accounts]
+    strategy_id_name = {s.id: s.strategy_name for s in strategies}
+    account_balance_history = [db.query(AccountBalanceHistory).filter(
+        AccountBalanceHistory.timestamp >= datetime.strptime(date_ranges[an][0], "%Y-%m-%d").date(),
+        AccountBalanceHistory.timestamp <= datetime.strptime(date_ranges[an][1], "%Y-%m-%d").date(),
+        AccountBalanceHistory.account_id == aid
+    ).all() for aid, an in zip(account_ids, account_names)]
+
+    account_balances = [AccountBalances(
+        name=str(account.account_name),
+        start_date=str(account.start_date),
+        preset_balances=[
+            StrategyBalance(
+                name=str(strategy.strategy_name),
+                balance=float(strategy.preset_balance),
+            ) for strategy in strategies if strategy.account_name == account.account_name],
+        realtime_balances=[
+            StrategyBalance(
+                name=str(strategy.strategy_name),
+                balance=retrieve_strategy_balance(strategy),
+            ) for strategy in strategies if strategy.account_name == account.account_name],
+        strategy_balance_records=[
+            StrategyBalanceRecord(
+                name=str(strategy_id_name[record.strategy_id]),
+                account_name=str(account.account_name),
+                balance=float(record.balance),
+                timestamp=record.timestamp
+            ) for record in account_histories
+        ],
+        record_start_date=date_ranges[str(account.account_name)][0],
+        record_end_date=date_ranges[str(account.account_name)][1]
+    ) for account, account_histories in zip(accounts, account_balance_history)]
+    return {
+        "summarized_preset": AccountBalances.sum_preset_df(account_balances),
+        "summarized_realtime": AccountBalances.sum_realtime_df(account_balances),
+        "linked_accounts": [{str(account.name): {
+            "preset": account.preset_df,
+            "realtime": account.realtime_df,
+            "history": {f"{account.record_start_date}:{account.record_end_date}": account.record_df}
+        } for account in account_balances}]
+    }
 
 
-# Admin-Type Methods
-# Account and Strategy Management
-def check_admin_token(token: str) -> bool:
+def check_admin_token(token: str):
     if current_session_tokens.get('admin') != token:
         raise Exception("Unauthorized access")
 
@@ -220,6 +203,13 @@ def list_accounts(token: str, db: Session):
     check_admin_token(token)
     accounts = db.query(Account).all()
     return accounts
+
+
+def list_user_linked_accounts(token: str, db: Session):
+    user_id = get_user_id(token)
+    user = db.query(User).filter(User.id == user_id).first()
+    linked_accounts = get_user_linked_accounts(user.name, db)
+    return linked_accounts
 
 
 def create_strategy(token: str, account_name: str, strategy_name: str, api_key: str, secret_key: str, passphrase: str,
@@ -388,15 +378,73 @@ def set_user_linked_account(token: str, user_name: str, account_ids: List[int], 
 
 
 # Backend Utility Methods
-def retrieve_strategy_balance(strategy: Strategy) -> float:
-    exchange_class = getattr(ccxt, strategy.exchange_type.lower())
-    exchange = exchange_class({
-        'apiKey': strategy.api_key,
-        'secret': strategy.secret_key,
-        'password': strategy.passphrase
-    })
+def _get_usdt_value_via_cross(currency, amount, exchange, markets):
+    btc_pair = f"{currency}/BTC"
+    btc_usdt_pair = "BTC/USDT"
+    if btc_pair in markets and btc_usdt_pair in markets:
+        ticker_currency_btc = exchange.fetch_ticker(btc_pair)
+        ticker_btc_usdt = exchange.fetch_ticker(btc_usdt_pair)
+        price_currency_btc = ticker_currency_btc['last']
+        price_btc_usdt = ticker_btc_usdt['last']
+        usdt_value = amount * price_currency_btc * price_btc_usdt
+        return usdt_value
+    eth_pair = f"{currency}/ETH"
+    eth_usdt_pair = "ETH/USDT"
+    if eth_pair in markets and eth_usdt_pair in markets:
+        ticker_currency_eth = exchange.fetch_ticker(eth_pair)
+        ticker_eth_usdt = exchange.fetch_ticker(eth_usdt_pair)
+        price_currency_eth = ticker_currency_eth['last']
+        price_eth_usdt = ticker_eth_usdt['last']
+        usdt_value = amount * price_currency_eth * price_eth_usdt
+        return usdt_value
+    return None
+
+
+def _sum_coin_to_usdt(exchange: ccxt.Exchange) -> float:
+    markets = exchange.load_markets()
     balance = exchange.fetch_balance()
-    return balance['total']
+    non_zero_balances = {
+        currency: amounts
+        for currency, amounts in balance['total'].items()
+        if amounts > 0
+    }
+    total_usdt_value = 0.0
+    prices = {}
+    for currency in non_zero_balances:
+        amount = balance['total'][currency]
+        if currency == 'USDT':
+            usdt_value = amount
+        else:
+            symbol = f"{currency}/USDT"
+            if symbol in markets:
+                ticker = exchange.fetch_ticker(symbol)
+                last_price = ticker['last']
+                usdt_value = amount * last_price
+            else:
+                logger.info("Market pair {symbol} not available. Trying alternative methods for {currency}...")
+                usdt_value = _get_usdt_value_via_cross(currency, amount, exchange, markets)
+                if usdt_value is None:
+                    logger.warning(f"Unable to value {currency} in USDT.")
+                    continue
+        prices[currency] = usdt_value
+        total_usdt_value += usdt_value
+    logger.info(f"Total Balance in USDT: {total_usdt_value:.2f}")
+    return total_usdt_value
+
+
+def retrieve_strategy_balance(strategy: Strategy) -> float:
+    try:
+        exchange_class = getattr(ccxt, strategy.exchange_type.lower())
+        exchange = exchange_class({
+            'apiKey': strategy.api_key,
+            'secret': strategy.secret_key,
+            'password': strategy.passphrase
+        })
+        balance = _sum_coin_to_usdt(exchange)
+    except Exception as e:
+        logger.error(f"Failed to retrieve balance for {strategy.strategy_name}: {str(e)}")
+        return float('nan')
+    return balance
 
 
 def get_user_linked_accounts(user_name: str, db: Session):
@@ -407,25 +455,12 @@ def get_user_linked_accounts(user_name: str, db: Session):
     return accounts
 
 
-# def sum_balance_tables(balances: Dict) -> Dict:
-#     total_preset_balance = sum(balance['preset_balance'] for balance in balances if 'preset_balance' in balance)
-#     total_realtime_balance = sum(balance['realtime_balance'] for balance in balances if 'realtime_balance' in balance)
-#     total_difference = total_realtime_balance - total_preset_balance
-#     total_percentage_difference = (total_difference / total_preset_balance) * 100 if total_preset_balance else 0
-#     return {
-#         'total_preset_balance': total_preset_balance,
-#         'total_realtime_balance': total_realtime_balance,
-#         'total_difference': total_difference,
-#         'total_percentage_difference': total_percentage_difference
-#     }
-
-
 # Scheduled Tasks with APScheduler
 
 def daily_balance_snapshot(db: Session):
     accounts = db.query(Account).all()
     for account in accounts:
-        strategies = db.query(Strategy).filter(Strategy.account_id == account.id).all()
+        strategies = db.query(Strategy).filter(Strategy.account_name == account.account_name).all()
         for strategy in strategies:
             strategy_balance = retrieve_strategy_balance(strategy)
             new_record = AccountBalanceHistory(
@@ -444,6 +479,3 @@ def start_scheduler(hour=0, minute=0):
     scheduler.add_job(lambda: daily_balance_snapshot(next(get_db())), 'cron', hour=hour, minute=minute)
     scheduler.start()
     logger.info(f"Scheduler started for every day at {hour}:{minute}")
-
-# Uncomment the line below to start the scheduler when running this module
-# start_scheduler()

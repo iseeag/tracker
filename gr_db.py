@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from typing import List
 
 import pandas as pd
@@ -75,53 +76,61 @@ class StrategyBalance(BaseModel):
     balance: float
 
 
-class AccountBalances(BaseModel):
-    name: str
-    strategy_balances: list[StrategyBalance]
-
-
-class PresetAccountBalance(AccountBalances):
-    start_date: str
-
-    def to_table(self) -> pd.DataFrame:
-        ...
-
-    @classmethod
-    def sum_to_table(cls, balances: List['PresetAccountBalance']) -> pd.DataFrame:
-        # sum_balance = [{"strategy_name": s.strategy_name,
-        #                 "total_preset_balance": sum([s.preset_balance for s in strategies
-        #                                              if s.strategy_name == s.strategy_name])
-        #                 } for s in strategies]
-        ...
-
-
-class RealtimeAccountBalance(AccountBalances):
-    ...
-
-    def to_table(self, preset_balance: PresetAccountBalance) -> pd.DataFrame:
-        ...
-
-    @classmethod
-    def sum_to_table(cls,
-                     realtime_balances: List['RealtimeAccountBalance'],
-                     preset_balances: List[PresetAccountBalance]) -> pd.DataFrame:
-        # realtime_strategy_balances = []
-        # sum_balance = [{"strategy_name": s['strategy_name'],
-        #                 "realtime_balance": sum([s['realtime_balance'] for s in realtime_strategy_balances
-        #                                          if s['strategy_name'] == s['strategy_name']])
-        #                 } for s in strategies]
-
-        ...
-
-
 class StrategyBalanceRecord(StrategyBalance):
     account_name: str
-    timestamp: str
+    timestamp: datetime
+
+
+class AccountBalances(BaseModel):
+    name: str
+    start_date: str
+    preset_balances: list[StrategyBalance]
+    realtime_balances: list[StrategyBalance]
+    strategy_balance_records: list[StrategyBalance]
+    record_start_date: str
+    record_end_date: str
+
+    @property
+    def preset_df(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            data=[(balance.name, balance.balance) for balance in self.preset_balances],
+            columns=['Strategy Name', 'Preset Balance']
+        )
+
+    @property
+    def realtime_df(self) -> pd.DataFrame:
+        preset_df = self.preset_df
+        realtime_df = pd.DataFrame(
+            data=[(balance.name, balance.balance) for balance in self.realtime_balances],
+            columns=["Strategy Name", "Realtime Balance"]
+        )
+        realtime_df['Difference'] = (realtime_df['Realtime Balance'] - preset_df['Preset Balance']).round(4)
+        realtime_df['Percentage Difference'] = (realtime_df['Difference'] / preset_df['Preset Balance']).round(4) * 100
+        return realtime_df
+
+    @property
+    def record_df(self) -> pd.DataFrame:
+        return pd.DataFrame()
 
     @classmethod
-    def to_table(cls, preset_balance: PresetAccountBalance, records: List['StrategyBalanceRecord']) -> pd.DataFrame:
-        ...
+    def sum_preset_df(cls, balances: List['AccountBalances']) -> pd.DataFrame:
+        summary = {}
+        for balance in balances:
+            summary[balance.name] = round(sum([b.balance for b in balance.preset_balances]), 4)
+        return pd.DataFrame(summary.items(), columns=['Account Name', 'Total Preset Balance'])
 
+    @classmethod
+    def sum_realtime_df(cls, balances: List['AccountBalances']) -> pd.DataFrame:
+        summary = {}
+        for balance in balances:
+            summary[balance.name] = round(sum([b.balance for b in balance.realtime_balances]), 4)
+        sum_preset_df = cls.sum_preset_df(balances)
+        sum_realtime_df = pd.DataFrame(summary.items(), columns=['Account Name', 'Total Realtime Balance'])
+        sum_realtime_df['Total Difference'] = (sum_realtime_df['Total Realtime Balance'] - sum_preset_df[
+            'Total Preset Balance']).round(4)
+        sum_realtime_df['Percentage Difference'] = (sum_realtime_df['Total Difference'] / sum_preset_df[
+            'Total Preset Balance']).round(4) * 100
+        return sum_realtime_df
 
 # Create tables
 # Base.metadata.create_all(bind=engine)

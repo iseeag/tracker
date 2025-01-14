@@ -1,6 +1,5 @@
 from datetime import datetime
-from typing import List, Tuple
-import time
+from typing import Dict, List, Tuple
 
 import gradio as gr
 import pandas as pd
@@ -11,11 +10,13 @@ from gr_backend import delete_account as delete_account_backend
 from gr_backend import delete_strategy as delete_strategy_backend
 from gr_backend import delete_user as delete_user_backend
 from gr_backend import get_account as get_account_backend
-from gr_backend import (get_account_balance_history_tables, get_db,
-                        get_preset_balances, get_realtime_balances)
+from gr_backend import get_db
 from gr_backend import get_strategy as get_strategy_backend
+from gr_backend import get_tables as get_tables_backend
 from gr_backend import get_user as get_user_backend
+from gr_backend import get_user_linked_accounts
 from gr_backend import list_accounts as list_accounts_backend
+from gr_backend import list_user_linked_accounts
 from gr_backend import list_users as list_users_backend
 from gr_backend import logout as user_logout_backend
 from gr_backend import update_account
@@ -23,7 +24,6 @@ from gr_backend import update_strategy as update_strategy_backend
 from gr_backend import update_user as update_user_backend
 from gr_backend import user_login as user_login_backend
 from gr_backend import validate_exchange_credentials
-from gr_backend import set_user_linked_account, get_user_linked_accounts
 
 
 def null_check(*args):
@@ -184,11 +184,6 @@ def toggle_panels_x3(token):
     return [gr.Group(visible=visible) for _ in range(3)]
 
 
-def toggle_panels_x2(token):
-    visible = True if token else True  # todo: fix this
-    return [gr.Group(visible=visible) for _ in range(2)]
-
-
 def clear_account_fields():
     return gr.Dropdown(value=''), gr.Textbox(value=''), gr.DateTime(value=None)
 
@@ -224,77 +219,11 @@ def fill_linked_accounts(token, user_name):
     return gr.CheckboxGroup(choices=account_names, value=linked_accounts)
 
 
-# -----------
-
-
-def get_balances(token):
+def get_tables(token, date_ranges: Dict[str, Tuple[str, str]] = None):
+    null_check(token)
     db = next(get_db())
-    try:
-        preset_balances = get_preset_balances(token, db)
-        realtime_balances = get_realtime_balances(token, db)
 
-        # Create DataFrames for tables
-        preset_df = pd.DataFrame(preset_balances)
-        realtime_df = pd.DataFrame(realtime_balances)
-
-        # Calculate differences and percentage differences
-        if not preset_df.empty and not realtime_df.empty:
-            realtime_df['Difference'] = realtime_df['realtime_balance'] - preset_df['preset_balance']
-            realtime_df['Percentage Difference'] = (realtime_df['Difference'] / preset_df['preset_balance']) * 100
-
-            # Prepare table footers
-            total_preset = preset_df['preset_balance'].sum()
-            total_realtime = realtime_df['realtime_balance'].sum()
-            total_diff = total_realtime - total_preset
-            total_pct_diff = (total_diff / total_preset) * 100 if total_preset != 0 else 0
-
-            preset_footer = f"Total Preset Balance: {total_preset:.2f}"
-            realtime_footer = (f"Total Realtime Balance: {total_realtime:.2f}, "
-                               f"Total Difference: {total_diff:.2f}, "
-                               f"Total Percentage Difference: {total_pct_diff:.2f}%")
-        else:
-            preset_footer = "No data available"
-            realtime_footer = "No data available"
-
-        return preset_df, preset_footer, realtime_df, realtime_footer
-    except Exception as e:
-        return pd.DataFrame(), f"Error: {str(e)}", pd.DataFrame(), f"Error: {str(e)}"
-
-
-def get_account_details(token, page_number=1):
-    db = next(get_db())
-    try:
-        account_history = get_account_balance_history_tables(token, db, page_number)
-        history_df = pd.DataFrame(account_history)
-        return history_df
-    except Exception as e:
-        return pd.DataFrame(), f"Error: {str(e)}"
-
-
-def get_tables(token, start_date: str = None, end_date: str = None):
-    summarized_preset_table = pd.DataFrame([['alksdjfl', 9384093, ], ['slkdjfs', 33948]],
-                                           columns=["Account Name", "Preset Balance"])
-    summarized_realtime_table = pd.DataFrame(
-        [['alksdjfl', 9384093, 39, 30], ['slkdjfs', 33948, 30, 89],
-         ['3lksdj', 230983, 39, 30], ['Total', 20390, 30, 30]],
-        columns=["Account Name", "Realtime Balance", "Difference", "Percentage Difference"])
-    preset_balance_table = pd.DataFrame([['alksdjfl', 9384093, ], ['slkdjfs', 33948]],
-                                        columns=["Account Name", "Preset Balance"])
-    realtime_balance_table = pd.DataFrame(
-        [['alksdjfl', 9384093, 39, 30], ['slkdjfs', 33948, 30, 89],
-         ['3lksdj', 230983, 39, 30], ['Total', 20390, 30, 30]],
-        columns=["Account Name", "Realtime Balance", "Difference",
-                 "Percentage Difference"])
-    history_table = pd.DataFrame(
-        [["2021-01-01", 9384093, 9384093, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
-        columns=["Date", "S1", "S2", "S3", "Total", "Diff1", "Diff2", "Diff3", "Total Diff",
-                 "Pct Diff1", "Pct Diff2", "Pct Diff3", "Total Pct Diff"])
-    return {"summarized_preset": summarized_preset_table,
-            "summarized_realtime": summarized_realtime_table,
-            "linked_accounts": [{"A_account": {
-                "preset": preset_balance_table,
-                "realtime": realtime_balance_table,
-                "history": {'2025-01-01:2026-01-01': history_table}}} for _ in range(3)]}
+    return get_tables_backend(token, date_ranges, db)
 
 
 # Initialize Gradio interface
@@ -420,16 +349,18 @@ def admin_interface():
     return admin_ui
 
 
+def set_date_ranges(token, start_date: str = None, end_date: str = None, account_name: str = None):
+    db = next(get_db())
+    accounts = list_user_linked_accounts(token, db)
+    default_ranges = {a.account_name: ('2025-01-01', '2025-02-01') for a in accounts}
+    if start_date and end_date and account_name:
+        default_ranges[account_name] = (start_date, end_date)
+    return default_ranges
+
+
 def user_interface():
     session_token = gr.State("")  # Initialize empty session token
-    tables = gr.State({
-        "summarized_preset": pd.DataFrame(),
-        "summarized_realtime": pd.DataFrame(),
-        "linked_accounts": [{"account": {
-            "preset": pd.DataFrame(),
-            "realtime": pd.DataFrame(),
-            "history": {'2025-01-01:2026-01-01': pd.DataFrame()}}}],
-    })  # Initialize empty tables
+    date_ranges = gr.State({})
     with gr.Blocks() as user_ui:
         with gr.Row():
             gr.Markdown("# User Panel")
@@ -442,8 +373,17 @@ def user_interface():
                     login_button = gr.Button("Login")
                     logout_button = gr.Button("Logout")
 
-        @gr.render(tables)
-        def render_tables(balance_tables):
+        @gr.render([date_ranges, session_token])
+        def render_tables(date_range_list, token):
+            if token and date_range_list:
+                balance_tables = get_tables(token, date_range_list)
+            else:
+                balance_tables = {"summarized_preset": pd.DataFrame(),
+                                  "summarized_realtime": pd.DataFrame(),
+                                  "linked_accounts": [{"account": {
+                                      "preset": pd.DataFrame(),
+                                      "realtime": pd.DataFrame(),
+                                      "history": {'2025-01-01:2026-01-01': pd.DataFrame()}}}]}
             gr.Markdown(lambda: f"## Summarized Account Balance `{datetime.now().strftime('%Y-%m-%d %H:%M')}`",
                         every=60.0)
             with gr.Row():
@@ -451,7 +391,7 @@ def user_interface():
                 gr.DataFrame(scale=4, label="Total Realtime Balance", value=balance_tables["summarized_realtime"])
             gr.Markdown("## Account Details")
             with gr.Group():
-                for account in balance_tables["linked_accounts"]:
+                for i, account in enumerate(balance_tables["linked_accounts"]):
                     account_name = list(account.keys())[0]
                     preset_df = account[account_name]['preset']
                     realtime_df = account[account_name]['realtime']
@@ -471,12 +411,19 @@ def user_interface():
                                 gr.Button('-', interactive=False)
                                 reload_button = gr.Button("Reload")
                         gr.DataFrame(scale=4, value=history_df)
-                    reload_button.click(
-                        get_tables, inputs=[session_token, start_date, end_date], outputs=tables)
 
-    login_button.click(fn=user_login, inputs=[login_token_input], outputs=[session_token, action_status])
-    logout_button.click(fn=logout, inputs=[session_token], outputs=[session_token, action_status])
-    session_token.change(fn=get_tables, inputs=[session_token], outputs=[tables])
+                    def _set_date_ranges(s, sd, ed):
+                        sd = (datetime.fromtimestamp(sd)).strftime("%Y-%m-%d")
+                        ed = (datetime.fromtimestamp(ed)).strftime("%Y-%m-%d")
+                        set_date_ranges(s, sd, ed, account_name)
+
+                    reload_button.click(
+                        _set_date_ranges, inputs=[session_token, start_date, end_date], outputs=date_ranges)
+
+    login_action = login_button.click(fn=user_login, inputs=[login_token_input], outputs=[session_token, action_status])
+    login_action.then(fn=set_date_ranges, inputs=[session_token], outputs=[date_ranges])
+    logout_action = logout_button.click(fn=logout, inputs=[session_token], outputs=[session_token, action_status])
+    logout_action.then(fn=lambda: {}, outputs=[date_ranges])
 
     return user_ui
 
