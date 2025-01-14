@@ -489,3 +489,6 @@ def start_scheduler(hour=0, minute=0):
     scheduler.add_job(lambda: daily_balance_snapshot(next(get_db())), 'cron', hour=hour, minute=minute)
     scheduler.start()
     logger.info(f"Scheduler started for every day at {hour}:{minute}")
+
+# Uncomment the line below to start the scheduler when running this module
+# start_scheduler()

@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List
 
 import pandas as pd
+from dask.rewrite import strategies
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from sqlalchemy import Column, Date, Float, Integer, String, create_engine
@@ -103,7 +104,30 @@ class AccountBalances(BaseModel):
 
     @property
     def record_df(self) -> pd.DataFrame:
-        return pd.DataFrame()
+        record_by_date = {}
+        for record in self.strategy_balance_records:
+            if record.timestamp not in record_by_date:
+                record_by_date[record.timestamp] = {}
+            record_by_date[record.timestamp] = record_by_date[record.timestamp] | {record.name: record.balance}
+        record_by_date = [(date, record) for date, record in record_by_date.items()]
+        record_by_date = sorted(record_by_date, key=lambda x: x[0])
+        data = []
+        presets = [balance.balance for balance in self.preset_balances]
+        for date, record in record_by_date:
+            date = date.strftime('%Y-%m-%d')
+            hists = [round(record.get(p.name, float('nan')), 4) for p in self.preset_balances]
+            diffs = [round(hist - preset, 4) for hist, preset in zip(hists, presets)]
+            percents = [round(diff / preset * 100, 4) if not pd.isna(diffs) else float('nan')
+                        for diff, preset in zip(diffs, presets)]
+            hist_sum = sum([h for h in hists if not pd.isna(h)])
+            diff_sum = sum([d for d in diffs if not pd.isna(d)])
+            percent_sum = round(diff_sum / sum(presets) * 100, 4)
+            data.append([date, *hists, hist_sum, *diffs, diff_sum, *percents, percent_sum])
+        columns = ['Date', *[f'{balance.name} $' for balance in self.preset_balances], 'Total Balance $',
+                   *[f'Δ{balance.name} $' for balance in self.preset_balances], 'Total Δ $',
+                   *[f'%Δ{balance.name}' for balance in self.preset_balances], 'Total %Δ']
+        record_df = pd.DataFrame(data, columns=columns)
+        return record_df
 
     @classmethod
     def sum_df(cls, balances: List['AccountBalances']) -> pd.DataFrame:
