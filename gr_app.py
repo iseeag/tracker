@@ -120,7 +120,6 @@ def get_strategy(token, account_name, strategy_name) -> Tuple[str, str, str, gr.
 
 def update_strategy(token, account_name, strategy_name, api_key, secret_key, passphrase, exchange_type, preset_balance):
     null_check(account_name, strategy_name, api_key, secret_key, exchange_type, preset_balance)
-    print(account_name, strategy_name, api_key, secret_key, exchange_type, preset_balance)
     try:
         preset_balance = float(preset_balance)
     except ValueError:
@@ -178,6 +177,13 @@ def update_user(token, name, login_token, linked_accounts):
     return "User update failed."
 
 
+def get_tables(token, date_ranges: Dict[str, Tuple[str, str]] = None):
+    null_check(token)
+    db = next(get_db())
+
+    return get_tables_backend(token, date_ranges, db)
+
+
 # ######### ui react ###########
 def toggle_panels_x3(token):
     visible = True if token else True  # todo: fix this
@@ -219,11 +225,11 @@ def fill_linked_accounts(token, user_name):
     return gr.CheckboxGroup(choices=account_names, value=linked_accounts)
 
 
-def get_tables(token, date_ranges: Dict[str, Tuple[str, str]] = None):
-    null_check(token)
-    db = next(get_db())
-
-    return get_tables_backend(token, date_ranges, db)
+def update_tables_via_date_range_cfg(cfg):
+    if cfg:
+        cfg['counter'] += 1
+        return cfg, f"Realtime balance last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    return cfg, "Login to view balance!"
 
 
 # Initialize Gradio interface
@@ -358,9 +364,13 @@ def set_date_ranges(token, start_date: str = None, end_date: str = None, account
     return default_ranges
 
 
+def set_date_range_config(token, start_date: str = None, end_date: str = None, account_name: str = None):
+    return {'counter': 0, 'date_ranges': set_date_ranges(token, start_date, end_date, account_name)}
+
+
 def user_interface():
     session_token = gr.State("")  # Initialize empty session token
-    date_ranges = gr.State({})
+    date_range_cfg = gr.State({})
     with gr.Blocks() as user_ui:
         with gr.Row():
             gr.Markdown("# User Panel")
@@ -373,10 +383,17 @@ def user_interface():
                     login_button = gr.Button("Login")
                     logout_button = gr.Button("Logout")
 
-        @gr.render([date_ranges, session_token])
-        def render_tables(date_range_list, token):
-            if token and date_range_list:
-                balance_tables = get_tables(token, date_range_list)
+        with gr.Row():
+            with gr.Column(scale=3):
+                gr.Markdown(lambda: f"## Summarized Account Balance ", every=60)
+            with gr.Column():
+                latest_time_txt = gr.Textbox(lambda: f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                                             container=False, every=60, show_label=False, interactive=False)
+
+        @gr.render([date_range_cfg, session_token])
+        def render_tables(date_range_config, token):
+            if token and date_range_config:
+                balance_tables = get_tables(token, date_range_config['date_ranges'])
             else:
                 balance_tables = {"summarized": pd.DataFrame(),
                                   "linked_accounts": [{
@@ -387,8 +404,6 @@ def user_interface():
                                                   'end_date': '2026-01-01',
                                                   'data': pd.DataFrame()},
                                   }]}
-            gr.Markdown(lambda: f"## Summarized Account Balance `{datetime.now().strftime('%Y-%m-%d %H:%M')}`",
-                        every=60.0)
             with gr.Row():
                 gr.DataFrame(label="Total Balance", value=balance_tables["summarized"], show_label=False)
             gr.Markdown("## Account Details")
@@ -412,18 +427,20 @@ def user_interface():
                                 reload_button = gr.Button("Reload")
                         gr.DataFrame(scale=4, value=history_df)
 
-                    def _set_date_ranges(s, sd, ed):
+                    def _set_date_range_config(s, sd, ed):
                         sd = (datetime.fromtimestamp(sd)).strftime("%Y-%m-%d")
                         ed = (datetime.fromtimestamp(ed)).strftime("%Y-%m-%d")
-                        return set_date_ranges(s, sd, ed, account_name)
+                        return set_date_range_config(s, sd, ed, account_name)
 
                     reload_button.click(
-                        _set_date_ranges, inputs=[session_token, start_date, end_date], outputs=[date_ranges])
+                        _set_date_range_config, inputs=[session_token, start_date, end_date], outputs=[date_range_cfg])
 
     login_action = login_button.click(fn=user_login, inputs=[login_token_input], outputs=[session_token, action_status])
-    login_action.then(fn=set_date_ranges, inputs=[session_token], outputs=[date_ranges])
+    login_action.then(fn=set_date_range_config, inputs=[session_token], outputs=[date_range_cfg])
     logout_action = logout_button.click(fn=logout, inputs=[session_token], outputs=[session_token, action_status])
-    logout_action.then(fn=lambda: {}, outputs=[date_ranges])
+    logout_action.then(fn=lambda: {}, outputs=[date_range_cfg])
+    latest_time_txt.change(update_tables_via_date_range_cfg, inputs=[date_range_cfg],
+                           outputs=[date_range_cfg, action_status])
 
     return user_ui
 

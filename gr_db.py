@@ -15,6 +15,7 @@ load_dotenv()
 # Database connection
 APP_PREFIX = 'gr_'
 DATABASE_URL = os.getenv('DATABASE_URL')
+ROUND_DIGITS = 2
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -92,13 +93,14 @@ class AccountBalances(BaseModel):
     @property
     def account_df(self) -> pd.DataFrame:
         account_df = pd.DataFrame(
-            data=[(preset_balance.name, preset_balance.balance, realtime_balance.balance)
+            data=[(preset_balance.name, preset_balance.balance, round(realtime_balance.balance, ROUND_DIGITS))
                   for preset_balance, realtime_balance in zip(self.preset_balances, self.realtime_balances)],
             columns=["Strategy Name", "Preset Balance $", "Realtime Balance $"]
         )
-        account_df['Difference $'] = (account_df['Realtime Balance $'] - account_df['Preset Balance $']).round(4)
-        account_df['Percentage Difference %'] = (account_df['Difference $'] / account_df['Preset Balance $']).round(
-            4) * 100
+        account_df['Difference $'] = (account_df['Realtime Balance $'] - account_df['Preset Balance $']
+                                      ).round(ROUND_DIGITS)
+        account_df['Percentage Difference %'] = (account_df['Difference $'] / account_df['Preset Balance $'] * 100
+                                                 ).round(ROUND_DIGITS)
         return account_df
 
     @property
@@ -114,13 +116,13 @@ class AccountBalances(BaseModel):
         data = []
         presets = [balance.balance for balance in self.preset_balances]
         for date, record in record_by_date:
-            hists = [round(record.get(p.name, float('nan')), 4) for p in self.preset_balances]
-            diffs = [round(hist - preset, 4) for hist, preset in zip(hists, presets)]
-            percents = [round(diff / preset * 100, 4) if not pd.isna(diffs) else float('nan')
+            hists = [round(record.get(p.name, float('nan')), ROUND_DIGITS) for p in self.preset_balances]
+            diffs = [round(hist - preset, ROUND_DIGITS) for hist, preset in zip(hists, presets)]
+            percents = [round(diff / preset * 100, ROUND_DIGITS) if not pd.isna(diffs) else float('nan')
                         for diff, preset in zip(diffs, presets)]
             hist_sum = sum([h for h in hists if not pd.isna(h)])
             diff_sum = sum([d for d in diffs if not pd.isna(d)])
-            percent_sum = round(diff_sum / sum(presets) * 100, 4)
+            percent_sum = round(diff_sum / sum(presets) * 100, ROUND_DIGITS)
             data.append([date, *hists, hist_sum, *diffs, diff_sum, *percents, percent_sum])
         columns = ['Date', *[f'{balance.name} $' for balance in self.preset_balances], 'Total Balance $',
                    *[f'Δ{balance.name} $' for balance in self.preset_balances], 'Total Δ $',
@@ -134,13 +136,14 @@ class AccountBalances(BaseModel):
         for balance in balances:
             summary.append((
                 balance.name,
-                round(sum([b.balance for b in balance.preset_balances]), 4),
-                round(sum([b.balance for b in balance.realtime_balances]), 4),
+                round(sum([b.balance for b in balance.preset_balances]), ROUND_DIGITS),
+                round(sum([b.balance for b in balance.realtime_balances]), ROUND_DIGITS),
             ))
         sum_df = pd.DataFrame(summary, columns=['Account Name', 'Total Preset Balance $', 'Total Realtime Balance $'])
-        sum_df['Total Difference $'] = sum_df['Total Realtime Balance $'] - sum_df['Total Preset Balance $']
-        sum_df['Percentage Difference %'] = (sum_df['Total Difference $'] / sum_df['Total Preset Balance $']).round(
-            4) * 100
+        sum_df['Total Difference $'] = round(sum_df['Total Realtime Balance $'] - sum_df['Total Preset Balance $'],
+                                             ROUND_DIGITS)
+        sum_df['Percentage Difference %'] = (sum_df['Total Difference $'] / sum_df['Total Preset Balance $'] * 100
+                                             ).round(ROUND_DIGITS)
         return sum_df
 
 

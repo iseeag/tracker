@@ -102,6 +102,7 @@ def get_tables(token: str, date_ranges: Dict[str, Tuple[str, str]], db: Session)
                       'data': pd.DataFrame()},
       }]}
     """
+    logger.info(f"Getting balance tables")
     user_id = get_user_id(token)
     accounts, strategies = retrieve_multi_info(user_id, db)
     account_ids = [account.id for account in accounts]
