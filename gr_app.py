@@ -28,28 +28,28 @@ from gr_backend import validate_exchange_credentials
 
 def null_check(*args):
     if not all([*args]):
-        raise gr.Error("All fields are required!")
+        raise gr.Error("所有字段都是必填的!")
 
 
 # ######### backends ###########
 def master_login(master_token) -> Tuple[str, str]:
     token = admin_login(master_token)
     if not token:
-        return "", "Login failed"
-    return token, "Login successful!"
+        return "", "登录失败"
+    return token, "登录成功!"
 
 
 def user_login(token: str) -> Tuple[str, str]:
     token = user_login_backend(token, next(get_db()))
     if not token:
-        return "", "Login failed"
-    return token, "Login successful!"
+        return "", "登录失败"
+    return token, "登录成功! 资产余额将自动加载！"
 
 
 def logout(token) -> Tuple[str, str]:
     if user_logout_backend(token):
-        return "", "Logout successful!"
-    return "", "Logout failed"
+        return "", "登出成功!"
+    return "", "登出失败"
 
 
 def add_account(token, account_name, start_date: float):
@@ -58,9 +58,9 @@ def add_account(token, account_name, start_date: float):
     start_date = (datetime.fromtimestamp(start_date)).strftime("%Y-%m-%d")
     try:
         create_account(token, account_name, start_date, db)
-        return "Account added successfully!"
+        return "账户添加成功!"
     except Exception as e:
-        return f"Failed to add account: {str(e)}"
+        return f"添加账户失败: {str(e)}"
 
 
 def modify_account(token, account_name, start_date):
@@ -68,8 +68,8 @@ def modify_account(token, account_name, start_date):
     db = next(get_db())
     start_date = (datetime.fromtimestamp(start_date)).strftime("%Y-%m-%d")
     if update_account(token, account_name, start_date, db):
-        return "Account updated successfully!"
-    return "Account update failed."
+        return "账户更新成功!"
+    return "账户更新失败."
 
 
 def delete_account(token, account_name):
@@ -77,10 +77,10 @@ def delete_account(token, account_name):
     db = next(get_db())
     try:
         if delete_account_backend(token, account_name, db):
-            return "Account deleted successfully!"
-        return "Account deletion failed."
+            return "账户删除成功!"
+        return "账户删除失败."
     except Exception as e:
-        return f"Failed to delete account: {str(e)}"
+        return f"删除账户失败: {str(e)}"
 
 
 def update_selectable_accounts(token) -> gr.Dropdown:
@@ -97,15 +97,15 @@ def add_strategy(token, account_name, strategy_name, api_key, secret_key, passph
     try:
         preset_balance = float(preset_balance)
     except ValueError:
-        raise gr.Error("Preset balance must be a number!")
+        raise gr.Error("预设余额必须是数字!")
 
     db = next(get_db())
     try:
         create_strategy(token, account_name, strategy_name, api_key, secret_key, passphrase, exchange_type,
                         preset_balance, db)
-        return "Strategy added successfully!"
+        return "策略添加成功!"
     except Exception as e:
-        return f"Failed to add strategy: {str(e)}"
+        return f"添加策略失败: {str(e)}"
 
 
 def get_strategy(token, account_name, strategy_name) -> Tuple[str, str, str, gr.Dropdown, str]:
@@ -123,36 +123,36 @@ def update_strategy(token, account_name, strategy_name, api_key, secret_key, pas
     try:
         preset_balance = float(preset_balance)
     except ValueError:
-        raise gr.Error("Preset balance must be a number!")
+        raise gr.Error("预设余额必须是数字!")
 
     db = next(get_db())
     if update_strategy_backend(token, account_name, strategy_name, api_key, secret_key, passphrase, exchange_type,
                                preset_balance, db):
-        return "Strategy updated successfully!"
-    return "Strategy update failed."
+        return "策略更新成功!"
+    return "策略更新失败."
 
 
 def delete_strategy(token, account_name, strategy_name):
     null_check(account_name, strategy_name)
     db = next(get_db())
     if delete_strategy_backend(token, account_name, strategy_name, db):
-        return "Strategy deleted successfully!"
-    return "Strategy deletion failed."
+        return "策略删除成功!"
+    return "策略删除失败."
 
 
 def validate_strategy(api_key, secret_key, passphrase, exchange_type):
     null_check(api_key, secret_key, passphrase, exchange_type)
     if validate_exchange_credentials(exchange_type, api_key, secret_key, passphrase):
-        return "Credentials are valid!"
-    return "Credentials are invalid!"
+        return "帐秘有效!"
+    return "帐秘无效!"
 
 
 def add_user(token, name, login_token, linked_accounts):
     null_check(name, login_token)
     db = next(get_db())
     if create_user_backend(token, name, login_token, linked_accounts, db):
-        return "User added successfully!"
-    return f"Failed to add user!"
+        return "用户添加成功!"
+    return f"添加用户失败!"
 
 
 def update_selectable_users(token) -> gr.Dropdown:
@@ -165,16 +165,16 @@ def remove_user(token, name):
     null_check(name)
     db = next(get_db())
     if delete_user_backend(token, name, db):
-        return "User deleted successfully!"
-    return "User deletion failed."
+        return "用户删除成功!"
+    return "用户删除失败."
 
 
 def update_user(token, name, login_token, linked_accounts):
     null_check(name, login_token)
     db = next(get_db())
     if update_user_backend(token, name, login_token, linked_accounts, db):
-        return "User updated successfully!"
-    return "User update failed."
+        return "用户更新成功!"
+    return "用户更新失败."
 
 
 def get_tables(token, date_ranges: Dict[str, Tuple[str, str]] = None):
@@ -228,8 +228,8 @@ def fill_linked_accounts(token, user_name):
 def update_tables_via_date_range_cfg(cfg):
     if cfg:
         cfg['counter'] += 1
-        return cfg, f"Realtime balance last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-    return cfg, "Login to view balance!"
+        return cfg, f"实时余额更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    return cfg, "登录以查看余额!"
 
 
 # Initialize Gradio interface
@@ -238,65 +238,65 @@ def admin_interface():
 
     with gr.Blocks() as admin_ui:
         with gr.Row():
-            gr.Markdown("# Administration Panel")
-            action_status = gr.Textbox(label="Action Status", value="Please login first!", text_align="right")
-        gr.Markdown("## Login")
+            gr.Markdown("# 账户管理系统")
+            action_status = gr.Textbox(label="状态信息", value="请先登录!", text_align="right")
+        gr.Markdown("## 登录")
         with gr.Group():
             with gr.Row():
-                master_token_input = gr.Textbox(label="Master Token", type="password", scale=3,
+                master_token_input = gr.Textbox(label="管理员令牌", type="password", scale=3,
                                                 value='20add5567250ccff972607fc1e516047')
                 with gr.Column():
-                    login_button = gr.Button("Login")
-                    logout_button = gr.Button("Logout")
+                    login_button = gr.Button("登录")
+                    logout_button = gr.Button("登出")
 
-        gr.Markdown("## Account Management")
+        gr.Markdown("## 账户管理")
         with gr.Group(visible=False) as account_panel:
             with gr.Row():
-                selected_account = gr.Dropdown(label="Select Accounts", choices=[], interactive=True)
-                account_name_input = gr.Textbox(label="Account Name")
-                start_date_input = gr.DateTime(label="Start Date", include_time=False)
+                selected_account = gr.Dropdown(label="选择账户", choices=[], interactive=True)
+                account_name_input = gr.Textbox(label="账户名称")
+                start_date_input = gr.DateTime(label="开始日期", include_time=False)
                 with gr.Column():
                     with gr.Row():
-                        add_account_button = gr.Button("Add")
-                        delete_account_button = gr.Button("Delete")
+                        add_account_button = gr.Button("添加")
+                        delete_account_button = gr.Button("删除")
                     with gr.Row():
-                        update_account_button = gr.Button("Update")
+                        update_account_button = gr.Button("更新")
 
-        gr.Markdown("### Strategy Management")
+        gr.Markdown("### 策略管理")
         with gr.Group(visible=False) as strategy_panel:
             with gr.Row():
                 with gr.Column(scale=3):
                     with gr.Row():
                         selected_strategy = gr.Dropdown(
-                            value='', label="Select Strategy", choices=['AI', 'DCA', 'CRYPTO', 'MARTINGALE'],
+                            value='', label="选择策略", choices=['AI', 'DCA', 'CRYPTO', 'MARTINGALE'],
                             interactive=True)
-                        preset_balance_input = gr.Textbox(label="Preset Balance")
-                        exchange_type_input = gr.Dropdown(label="Exchange Type", choices=["bitget", "binance"],
+                        preset_balance_input = gr.Textbox(label="预设余额")
+                        exchange_type_input = gr.Dropdown(label="交易所类型", choices=["bitget", "binance"],
                                                           interactive=True, allow_custom_value=False)
                     with gr.Row():
-                        api_key_input = gr.Textbox(label="API Key")
-                        secret_key_input = gr.Textbox(label="Secret Key", max_lines=1)
-                        passphrase_input = gr.Textbox(label="Passphrase", type="password")
+                        api_key_input = gr.Textbox(label="API密钥")
+                        secret_key_input = gr.Textbox(label="密钥", max_lines=1)
+                        passphrase_input = gr.Textbox(label="密码短语", type="password")
                 with gr.Column():
-                    add_strategy_button = gr.Button("Add")
-                    update_strategy_button = gr.Button("Update")
-                    delete_strategy_button = gr.Button("Delete")
-                    validate_strategy_button = gr.Button("Validate")
+                    add_strategy_button = gr.Button("添加策略")
+                    update_strategy_button = gr.Button("更新策略")
+                    delete_strategy_button = gr.Button("删除策略")
+                    validate_strategy_button = gr.Button("验证策略")
 
-        gr.Markdown("## User Management")
+        gr.Markdown("## 用户管理")
         with gr.Group(visible=False) as user_panel:
             with gr.Row():
-                selected_user = gr.Dropdown(label="Select User", choices=[])
-                user_name_input = gr.Textbox(label="User Name")
-                login_token_input = gr.Textbox(label="Login Token")
+                selected_user = gr.Dropdown(label="选择用户", choices=[])
+                user_name_input = gr.Textbox(label="用户名")
+                login_token_input = gr.Textbox(label="登录令牌")
                 with gr.Column():
                     with gr.Row():
-                        add_user_button = gr.Button("Add")
-                        delete_user_button = gr.Button("Delete")
+                        add_user_button = gr.Button("添加用户")
+                        delete_user_button = gr.Button("删除用户")
                     with gr.Row():
-                        update_user_button = gr.Button("Update")
+                        update_user_button = gr.Button("更新用户")
 
-            linked_accounts = gr.CheckboxGroup(label="Linked Accounts", choices=[], interactive=True)
+            linked_accounts = gr.CheckboxGroup(label="选择关联账户", choices=[], interactive=True)
 
         # ---- login ----
         login_action = login_button.click(
@@ -373,21 +373,21 @@ def user_interface():
     date_range_cfg = gr.State({})
     with gr.Blocks() as user_ui:
         with gr.Row():
-            gr.Markdown("# User Panel")
-            action_status = gr.Textbox(label="Action Status", value="Please login first!", text_align="right")
-        gr.Markdown("## Login")
+            gr.Markdown("# 用户面板")
+            action_status = gr.Textbox(label="状态信息", value="请先登录!", text_align="right")
+        gr.Markdown("## 登录")
         with gr.Group():
             with gr.Row():
-                login_token_input = gr.Textbox(label="Login Token", type="password", scale=3, value='abc')
+                login_token_input = gr.Textbox(label="登录令牌", type="password", scale=3, value='abc')
                 with gr.Column():
-                    login_button = gr.Button("Login")
-                    logout_button = gr.Button("Logout")
+                    login_button = gr.Button("登录")
+                    logout_button = gr.Button("登出")
 
         with gr.Row():
             with gr.Column(scale=3):
-                gr.Markdown(lambda: f"## Summarized Account Balance ", every=60)
+                gr.Markdown(lambda: f"## 账户余额汇总 ", every=60)
             with gr.Column():
-                latest_time_txt = gr.Textbox(lambda: f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                latest_time_txt = gr.Textbox(lambda: f"最近更新时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                                              container=False, every=60, show_label=False, interactive=False)
 
         @gr.render([date_range_cfg, session_token])
@@ -405,8 +405,8 @@ def user_interface():
                                                   'data': pd.DataFrame()},
                                   }]}
             with gr.Row():
-                gr.DataFrame(label="Total Balance", value=balance_tables["summarized"], show_label=False)
-            gr.Markdown("## Account Details")
+                gr.DataFrame(label="总余额", value=balance_tables["summarized"], show_label=False)
+            gr.Markdown("## 账户详情")
             with gr.Group():
                 for i, account in enumerate(balance_tables["linked_accounts"]):
                     account_name = account['name']
@@ -414,17 +414,17 @@ def user_interface():
                     account_start_date = account['start_date']
                     history_df = account['history']['data']
                     start_date, end_date = account['history']['start_date'], account['history']['end_date']
-                    with gr.Accordion(label=f"< {account_name} > since {account_start_date} ", open=False):
+                    with gr.Accordion(label=f"< {account_name} > 自 {account_start_date} ", open=False):
                         gr.DataFrame(value=account_df, show_label=False)
-                        gr.Markdown("### Account Balance History")
+                        gr.Markdown("### 账户余额历史")
                         with gr.Row():
                             start_date = gr.DateTime(
-                                value=start_date, label="Start Date", include_time=False, interactive=True)
+                                value=start_date, label="开始日期", include_time=False, interactive=True)
                             end_date = gr.DateTime(
-                                value=end_date, label="End Date", include_time=False, interactive=True)
+                                value=end_date, label="结束日期", include_time=False, interactive=True)
                             with gr.Column():
                                 gr.Button('-', interactive=False)
-                                reload_button = gr.Button("Reload")
+                                reload_button = gr.Button("重新加载")
                         gr.DataFrame(scale=4, value=history_df)
 
                     def _set_date_range_config(s, sd, ed):
@@ -447,10 +447,10 @@ def user_interface():
 
 if __name__ == "__main__":
     with gr.Blocks() as app:
-        gr.Markdown("# Asset Tracker App")
-        with gr.Tab("User"):
+        gr.Markdown("# 资产跟踪器")
+        with gr.Tab("用户"):
             user_interface()
-        with gr.Tab("Admin"):
+        with gr.Tab("管理员"):
             admin_interface()
 
     app.launch(inbrowser=True)
