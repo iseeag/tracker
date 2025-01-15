@@ -423,7 +423,7 @@ def user_interface():
                             end_date = gr.DateTime(
                                 value=end_date, label="结束日期", include_time=False, interactive=True)
                             with gr.Column():
-                                gr.Button('-', interactive=False)
+                                gr.Textbox('', interactive=False, show_label=False, container=False)
                                 reload_button = gr.Button("重新加载")
                         gr.DataFrame(scale=4, value=history_df)
 

@@ -95,11 +95,11 @@ class AccountBalances(BaseModel):
         account_df = pd.DataFrame(
             data=[(preset_balance.name, preset_balance.balance, round(realtime_balance.balance, ROUND_DIGITS))
                   for preset_balance, realtime_balance in zip(self.preset_balances, self.realtime_balances)],
-            columns=["Strategy Name", "Preset Balance $", "Realtime Balance $"]
+            columns=["策略名称", "预设余额 $", "实时余额 $"]
         )
-        account_df['Difference $'] = (account_df['Realtime Balance $'] - account_df['Preset Balance $']
+        account_df['差额 $'] = (account_df['实时余额 $'] - account_df['预设余额 $']
                                       ).round(ROUND_DIGITS)
-        account_df['Percentage Difference %'] = (account_df['Difference $'] / account_df['Preset Balance $'] * 100
+        account_df['差额百分比 %'] = (account_df['差额 $'] / account_df['预设余额 $'] * 100
                                                  ).round(ROUND_DIGITS)
         return account_df
 
@@ -124,9 +124,9 @@ class AccountBalances(BaseModel):
             diff_sum = sum([d for d in diffs if not pd.isna(d)])
             percent_sum = round(diff_sum / sum(presets) * 100, ROUND_DIGITS)
             data.append([date, *hists, hist_sum, *diffs, diff_sum, *percents, percent_sum])
-        columns = ['Date', *[f'{balance.name} $' for balance in self.preset_balances], 'Total Balance $',
-                   *[f'Δ{balance.name} $' for balance in self.preset_balances], 'Total Δ $',
-                   *[f'%Δ{balance.name}' for balance in self.preset_balances], 'Total %Δ']
+        columns = ['日期', *[f'{balance.name} $' for balance in self.preset_balances], '总余额 $',
+                   *[f'Δ{balance.name} $' for balance in self.preset_balances], '总差额 $',
+                   *[f'%Δ{balance.name}' for balance in self.preset_balances], '总差额百分比']
         record_df = pd.DataFrame(data, columns=columns)
         return record_df
 
@@ -139,10 +139,10 @@ class AccountBalances(BaseModel):
                 round(sum([b.balance for b in balance.preset_balances]), ROUND_DIGITS),
                 round(sum([b.balance for b in balance.realtime_balances]), ROUND_DIGITS),
             ))
-        sum_df = pd.DataFrame(summary, columns=['Account Name', 'Total Preset Balance $', 'Total Realtime Balance $'])
-        sum_df['Total Difference $'] = round(sum_df['Total Realtime Balance $'] - sum_df['Total Preset Balance $'],
+        sum_df = pd.DataFrame(summary, columns=['账户名称', '总预设余额 $', '总实时余额 $'])
+        sum_df['总差额 $'] = round(sum_df['总实时余额 $'] - sum_df['总预设余额 $'],
                                              ROUND_DIGITS)
-        sum_df['Percentage Difference %'] = (sum_df['Total Difference $'] / sum_df['Total Preset Balance $'] * 100
+        sum_df['差额百分比 %'] = (sum_df['总差额 $'] / sum_df['总预设余额 $'] * 100
                                              ).round(ROUND_DIGITS)
         return sum_df
 
